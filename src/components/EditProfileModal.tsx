@@ -31,6 +31,8 @@ import {
 import { Profile, ExperienceFlowNode, Project, SkillCategory, SectionConfig } from '../types';
 import { AUTHORIZED_OWNER_EMAIL, DEFAULT_OWNER_PASSKEY } from './AuthModal';
 import { saveResumePdf, getResumePdf, clearResumePdf, StoredPdfRecord } from '../utils/pdfStorage';
+import { ImageUploadField } from './ImageUploadField';
+import { MultiImageGalleryUpload } from './MultiImageGalleryUpload';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -377,6 +379,67 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
   const handleRemoveProject = (id: string) => {
     setEditedProjects(editedProjects.filter((p) => p.id !== id));
+  };
+
+  const handleAddMetricToProject = (projectIndex: number, defaultLabel = '', defaultValue = '') => {
+    const copy = [...editedProjects];
+    const currentMetrics = copy[projectIndex].metrics || [];
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      metrics: [...currentMetrics, { label: defaultLabel, value: defaultValue }]
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleUpdateMetricInProject = (
+    projectIndex: number,
+    metricIndex: number,
+    field: 'label' | 'value',
+    newValue: string
+  ) => {
+    const copy = [...editedProjects];
+    const currentMetrics = [...(copy[projectIndex].metrics || [])];
+    if (currentMetrics[metricIndex]) {
+      currentMetrics[metricIndex] = {
+        ...currentMetrics[metricIndex],
+        [field]: newValue
+      };
+      copy[projectIndex] = {
+        ...copy[projectIndex],
+        metrics: currentMetrics
+      };
+      setEditedProjects(copy);
+    }
+  };
+
+  const handleRemoveMetricFromProject = (projectIndex: number, metricIndex: number) => {
+    const copy = [...editedProjects];
+    const currentMetrics = [...(copy[projectIndex].metrics || [])];
+    currentMetrics.splice(metricIndex, 1);
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      metrics: currentMetrics
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleMoveMetricInProject = (
+    projectIndex: number,
+    metricIndex: number,
+    direction: 'up' | 'down'
+  ) => {
+    const copy = [...editedProjects];
+    const currentMetrics = [...(copy[projectIndex].metrics || [])];
+    const targetIndex = direction === 'up' ? metricIndex - 1 : metricIndex + 1;
+    if (targetIndex < 0 || targetIndex >= currentMetrics.length) return;
+    const temp = currentMetrics[metricIndex];
+    currentMetrics[metricIndex] = currentMetrics[targetIndex];
+    currentMetrics[targetIndex] = temp;
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      metrics: currentMetrics
+    };
+    setEditedProjects(copy);
   };
 
   const handleExportJSON = () => {
@@ -767,15 +830,38 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
                     {storedPdfRecord && (
                       <>
-                        <a
-                          href={storedPdfRecord.dataUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 text-xs font-medium transition-colors"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              if (storedPdfRecord?.dataUrl) {
+                                const base64Part = storedPdfRecord.dataUrl.includes(',') 
+                                  ? storedPdfRecord.dataUrl.split(',')[1] 
+                                  : storedPdfRecord.dataUrl;
+                                const binaryString = window.atob(base64Part);
+                                const bytes = new Uint8Array(binaryString.length);
+                                for (let i = 0; i < binaryString.length; i++) {
+                                  bytes[i] = binaryString.charCodeAt(i);
+                                }
+                                const blob = new Blob([bytes], { type: 'application/pdf' });
+                                const blobUrl = URL.createObjectURL(blob);
+                                const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                                if (!win) {
+                                  window.open('/resume.pdf', '_blank', 'noopener,noreferrer');
+                                }
+                                setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+                                return;
+                              }
+                            } catch (e) {
+                              console.warn('Preview error:', e);
+                            }
+                            window.open('/resume.pdf', '_blank', 'noopener,noreferrer');
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 text-xs font-medium transition-colors cursor-pointer"
                         >
                           <ExternalLink className="w-3 h-3" />
                           <span>Preview</span>
-                        </a>
+                        </button>
                         <button
                           type="button"
                           onClick={handleClearPdf}
@@ -795,16 +881,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   )}
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-mono text-stone-600">Avatar Photo URL</label>
-                  <input
-                    type="text"
-                    value={editedProfile.avatarUrl || ''}
-                    onChange={(e) => setEditedProfile({ ...editedProfile, avatarUrl: e.target.value })}
-                    placeholder="Link to profile photo"
-                    className="w-full px-3 py-2 rounded-lg border border-stone-200 text-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                  />
-                </div>
+                <ImageUploadField
+                  label="Profile Avatar Photo"
+                  value={editedProfile.avatarUrl || ''}
+                  onChange={(url) => setEditedProfile({ ...editedProfile, avatarUrl: url })}
+                  aspectRatio="square"
+                  helperText="Upload your headshot or portrait photo directly, or paste a link."
+                />
 
                 <div className="space-y-1">
                   <label className="font-mono text-stone-600">Status Badge Text</label>
@@ -1071,14 +1154,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                                 </div>
                               </div>
 
-                              <div className="text-xs space-y-1 pt-1">
-                                <label className="font-mono text-stone-500 text-[11px]">Milestone Photo URL (Optional)</label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g. https://example.com/product.jpg"
+                              <div className="pt-1">
+                                <ImageUploadField
+                                  label="Milestone / Mechanism Photo (Optional)"
                                   value={role.imageUrl || ''}
-                                  onChange={(e) => handleRoleChange(card.id, role.id, 'imageUrl', e.target.value)}
-                                  className="w-full px-2.5 py-1.5 rounded border border-stone-300 bg-white text-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                                  onChange={(url) => handleRoleChange(card.id, role.id, 'imageUrl', url)}
+                                  aspectRatio={role.imageLayout === 'landscape-top' ? 'wide' : 'square'}
+                                  helperText="Upload a photo of the product, test fixture, or CAD assembly."
                                 />
                               </div>
 
@@ -1224,38 +1306,29 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <div className="space-y-1">
-                        <label className="font-mono text-stone-500 text-[11px]">Primary Image URL</label>
-                        <input
-                          type="text"
-                          placeholder="https://images.unsplash.com/..."
-                          value={project.imageUrl || ''}
-                          onChange={(e) => {
-                            const copy = [...editedProjects];
-                            copy[idx] = { ...copy[idx], imageUrl: e.target.value };
-                            setEditedProjects(copy);
-                          }}
-                          className="w-full px-3 py-1.5 rounded border border-stone-300 bg-white"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="font-mono text-stone-500 text-[11px]">Additional Gallery Images (comma separated)</label>
-                        <input
-                          type="text"
-                          placeholder="https://image1, https://image2..."
-                          value={(project.images || []).join(', ')}
-                          onChange={(e) => {
-                            const copy = [...editedProjects];
-                            copy[idx] = {
-                              ...copy[idx],
-                              images: e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-                            };
-                            setEditedProjects(copy);
-                          }}
-                          className="w-full px-3 py-1.5 rounded border border-stone-300 bg-white"
-                        />
-                      </div>
+                    <div className="space-y-3">
+                      <ImageUploadField
+                        label="Primary Project Image"
+                        value={project.imageUrl || ''}
+                        onChange={(url) => {
+                          const copy = [...editedProjects];
+                          copy[idx] = { ...copy[idx], imageUrl: url };
+                          setEditedProjects(copy);
+                        }}
+                        aspectRatio="wide"
+                        helperText="Primary photo featured on the project card and gallery modal."
+                      />
+
+                      <MultiImageGalleryUpload
+                        label="Additional Gallery Images"
+                        images={project.images || []}
+                        onChange={(imgs) => {
+                          const copy = [...editedProjects];
+                          copy[idx] = { ...copy[idx], images: imgs };
+                          setEditedProjects(copy);
+                        }}
+                        helperText="Upload CAD views, FEA simulations, prototype test photos, or mechanism details."
+                      />
                     </div>
 
                     <textarea
@@ -1283,6 +1356,205 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         className="w-full px-3 py-1.5 rounded border border-stone-300 bg-white"
                       />
                     </div>
+
+                    {/* Optional URLs: Source / CAD Repo and Product Specification */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                      <div className="space-y-1">
+                        <label className="font-mono text-stone-500 text-[11px]">
+                          Source / CAD Repo URL (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. https://github.com/saahiressa/project"
+                          value={project.githubUrl || ''}
+                          onChange={(e) => {
+                            const copy = [...editedProjects];
+                            copy[idx] = { ...copy[idx], githubUrl: e.target.value };
+                            setEditedProjects(copy);
+                          }}
+                          className="w-full px-3 py-1.5 rounded border border-stone-300 bg-white"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="font-mono text-stone-500 text-[11px]">
+                          Product Specification URL (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. https://specs.example.com/doc"
+                          value={project.liveUrl || ''}
+                          onChange={(e) => {
+                            const copy = [...editedProjects];
+                            copy[idx] = { ...copy[idx], liveUrl: e.target.value };
+                            setEditedProjects(copy);
+                          }}
+                          className="w-full px-3 py-1.5 rounded border border-stone-300 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Key Performance Specifications Section */}
+                    <div className="pt-2.5 border-t border-stone-200/80 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <label className="font-mono text-stone-800 text-xs font-semibold flex items-center gap-1.5">
+                            <span>Key Performance Specifications</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-200 text-stone-700 font-mono">
+                              {project.metrics?.length || 0}
+                            </span>
+                          </label>
+                          <p className="text-[11px] text-stone-500 mt-0.5">
+                            Add as many performance metrics, mechanical tolerances, or ratings as needed.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {project.metrics && project.metrics.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const copy = [...editedProjects];
+                                copy[idx] = { ...copy[idx], metrics: [] };
+                                setEditedProjects(copy);
+                              }}
+                              className="text-[11px] text-stone-400 hover:text-red-600 transition-colors cursor-pointer px-2 py-1"
+                              title="Clear all specifications for this project"
+                            >
+                              Clear All
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleAddMetricToProject(idx)}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-md bg-stone-900 text-white hover:bg-stone-800 transition-colors shadow-2xs cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Specification</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Quick Add Presets */}
+                      <div className="flex items-center flex-wrap gap-1.5 bg-stone-100/70 p-2 rounded-lg border border-stone-200/60">
+                        <span className="text-[10px] font-mono text-stone-500 mr-1">Quick Add:</span>
+                        {[
+                          { label: 'Drop Test Resistance', value: '1.5m' },
+                          { label: 'Ingress Rating', value: 'IP68' },
+                          { label: 'Thermal Headroom', value: '+14°C' },
+                          { label: 'Target Mass / Weight', value: '<150g' },
+                          { label: 'Critical Tolerance', value: '±0.02mm' },
+                          { label: 'First Pass Yield', value: '99.2%' },
+                          { label: 'Battery / Runtime', value: '18 hrs' }
+                        ].map((preset, pIdx) => (
+                          <button
+                            key={pIdx}
+                            type="button"
+                            onClick={() => handleAddMetricToProject(idx, preset.label, preset.value)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] bg-white border border-stone-200 text-stone-700 hover:border-stone-400 hover:text-stone-900 transition-colors cursor-pointer shadow-2xs"
+                            title={`Add preset ${preset.label} (${preset.value})`}
+                          >
+                            <Plus className="w-2.5 h-2.5 text-stone-400" />
+                            <span>{preset.label}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {(!project.metrics || project.metrics.length === 0) ? (
+                        <div className="p-3 text-center rounded-lg border border-dashed border-stone-300 bg-white text-[11px] text-stone-500 space-y-1">
+                          <p>No specifications added yet for this project.</p>
+                          <p className="text-[10px] text-stone-400">
+                            Click &ldquo;Add Specification&rdquo; or pick a quick preset above to add specs.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {project.metrics.map((metric, mIdx) => (
+                            <div
+                              key={mIdx}
+                              className="flex items-center gap-2 p-2.5 rounded-lg bg-white border border-stone-200 shadow-2xs text-xs"
+                            >
+                              <span className="font-mono text-[10px] font-bold text-stone-400 w-5 shrink-0 text-center">
+                                #{mIdx + 1}
+                              </span>
+
+                              {/* Up / Down reordering buttons */}
+                              <div className="flex flex-col gap-0.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={mIdx === 0}
+                                  onClick={() => handleMoveMetricInProject(idx, mIdx, 'up')}
+                                  className={`p-0.5 rounded transition-colors ${
+                                    mIdx === 0 
+                                      ? 'text-stone-200 cursor-not-allowed' 
+                                      : 'text-stone-400 hover:text-stone-800 hover:bg-stone-100 cursor-pointer'
+                                  }`}
+                                  title="Move up"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={mIdx === project.metrics.length - 1}
+                                  onClick={() => handleMoveMetricInProject(idx, mIdx, 'down')}
+                                  className={`p-0.5 rounded transition-colors ${
+                                    mIdx === project.metrics.length - 1 
+                                      ? 'text-stone-200 cursor-not-allowed' 
+                                      : 'text-stone-400 hover:text-stone-800 hover:bg-stone-100 cursor-pointer'
+                                  }`}
+                                  title="Move down"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              <div className="w-28 sm:w-36 shrink-0 space-y-0.5">
+                                <label className="block text-[10px] font-mono text-stone-400">Value</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. 1.5m / IP67"
+                                  value={metric.value}
+                                  onChange={(e) => handleUpdateMetricInProject(idx, mIdx, 'value', e.target.value)}
+                                  className="w-full px-2 py-1 rounded border border-stone-200 font-mono font-bold text-stone-900 text-xs focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                                />
+                              </div>
+
+                              <div className="flex-1 space-y-0.5">
+                                <label className="block text-[10px] font-mono text-stone-400">Specification Label</label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Drop Test Resistance"
+                                  value={metric.label}
+                                  onChange={(e) => handleUpdateMetricInProject(idx, mIdx, 'label', e.target.value)}
+                                  className="w-full px-2 py-1 rounded border border-stone-200 text-stone-700 text-xs focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMetricFromProject(idx, mIdx)}
+                                className="p-1.5 text-stone-400 hover:text-red-600 rounded transition-colors cursor-pointer self-end mb-0.5"
+                                title="Remove specification"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+
+                          {/* Secondary Add Button at bottom for convenience when list is long */}
+                          {project.metrics.length >= 2 && (
+                            <div className="pt-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleAddMetricToProject(idx)}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded border border-dashed border-stone-300 text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition-colors cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Add Another Specification</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1292,7 +1564,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           {activeTab === 'skills' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h3 className="text-sm font-semibold text-stone-900">Technical Proficiencies</h3>
+                <h3 className="text-sm font-semibold text-stone-900">Skills</h3>
                 <button
                   type="button"
                   onClick={() => {

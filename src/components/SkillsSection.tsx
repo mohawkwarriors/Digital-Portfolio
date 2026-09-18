@@ -28,7 +28,7 @@ export const SkillsSection: React.FC<SkillsSectionProps> = ({ skills }) => {
           className="space-y-1.5"
         >
           <h2 id="skills-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900">
-            Technical Proficiencies
+            Skills
           </h2>
         </motion.div>
 

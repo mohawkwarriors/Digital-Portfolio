@@ -22,6 +22,7 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
 }) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [storedPdf, setStoredPdf] = useState<StoredPdfRecord | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   
   const rawUrl = profile?.resumeUrl?.trim() || '/resume.pdf';
 
@@ -40,18 +41,92 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
     }
   }, [isOpen]);
 
+  // Convert base64 dataUrl into a native Blob URL for the iframe
+  useEffect(() => {
+    if (storedPdf && storedPdf.dataUrl) {
+      try {
+        const base64Part = storedPdf.dataUrl.includes(',') 
+          ? storedPdf.dataUrl.split(',')[1] 
+          : storedPdf.dataUrl;
+        const binaryString = window.atob(base64Part);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+
+        return () => {
+          URL.revokeObjectURL(url);
+        };
+      } catch (err) {
+        console.warn('Failed to convert base64 to Blob URL:', err);
+      }
+    } else {
+      setBlobUrl(null);
+    }
+  }, [storedPdf]);
+
   const isExternalGoogleDrive = rawUrl.includes('drive.google.com') && rawUrl.includes('/view');
 
-  // Prioritize the user's authentic uploaded PDF from IndexedDB, otherwise use the resume URL
-  const embedUrl = useMemo(() => {
-    if (storedPdf && storedPdf.dataUrl) {
-      return storedPdf.dataUrl;
+  // Embed source for iframe inside modal
+  const iframeSrc = useMemo(() => {
+    if (blobUrl) {
+      return blobUrl;
     }
     if (isExternalGoogleDrive) {
       return rawUrl.replace('/view', '/preview');
     }
-    return rawUrl;
-  }, [storedPdf, rawUrl, isExternalGoogleDrive]);
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl;
+    }
+    return `/resume.pdf?v=${Date.now()}`;
+  }, [blobUrl, isExternalGoogleDrive, rawUrl]);
+
+  // Safe HTTP destination URL for anchor right-click / middle-click
+  const fallbackUrl = useMemo(() => {
+    if (isExternalGoogleDrive) return rawUrl;
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) return rawUrl;
+    return '/resume.pdf';
+  }, [isExternalGoogleDrive, rawUrl]);
+
+  // Open in new tab handler that never uses raw data: URLs (which browsers block)
+  const handleOpenInNewTab = (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    // 1. External cloud or Google Drive links
+    if (isExternalGoogleDrive) {
+      window.open(rawUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      window.open(rawUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // 2. If we have a valid blob URL from the uploaded PDF
+    if (blobUrl) {
+      const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      if (win) return;
+    }
+
+    // 3. Otherwise open the server-hosted endpoint directly
+    const targetUrl = `/resume.pdf?v=${Date.now()}`;
+    const opened = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    
+    // In case popup blocker intercepted window.open, trigger anchor click
+    if (!opened) {
+      const anchor = document.createElement('a');
+      anchor.href = targetUrl;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    }
+  };
 
   // Direct untouched original PDF file download handler
   const handleDownload = async () => {
@@ -152,12 +227,13 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
               <span>{isDownloading ? 'Downloading...' : 'Download'}</span>
             </button>
 
-            {/* Open in new tab */}
+            {/* Open in new tab - works with both left click and right-click */}
             <a
               id="open-resume-new-tab"
-              href={embedUrl}
+              href={fallbackUrl}
+              onClick={handleOpenInNewTab}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg text-xs font-medium transition-colors cursor-pointer"
               title="Open PDF in new tab"
             >
@@ -177,11 +253,11 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
           </div>
         </div>
 
-        {/* PDF Embed Viewer: Displays only the untouched PDF */}
+        {/* PDF Embed Viewer */}
         <div className="flex-1 bg-stone-950 relative overflow-hidden flex flex-col">
           <iframe 
-            key={embedUrl}
-            src={`${embedUrl}#toolbar=1&navpanes=0`} 
+            key={iframeSrc}
+            src={`${iframeSrc}#toolbar=1&navpanes=0`} 
             title="Mohammed Saahir Essa - Resume PDF"
             className="w-full h-full border-0 bg-stone-900"
           />

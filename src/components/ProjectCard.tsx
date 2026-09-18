@@ -6,8 +6,6 @@ import {
   ChevronRight,
   ExternalLink,
   Github,
-  Layers,
-  CheckCircle2,
   TrendingUp,
   Maximize2,
   Image as ImageIcon
@@ -191,24 +189,29 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 </p>
               </div>
 
-              {/* Key Metrics */}
+              {/* Key Performance Specifications */}
               {project.metrics && project.metrics.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-                    <TrendingUp className="w-3.5 h-3.5 text-stone-600" />
-                    <span>Key Performance Specifications</span>
+                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-stone-600" />
+                      <span>Key Performance Specifications</span>
+                    </span>
+                    <span className="text-[10px] text-stone-400 font-mono">
+                      {project.metrics.length} {project.metrics.length === 1 ? 'spec' : 'specs'}
+                    </span>
                   </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                     {project.metrics.map((m, idx) => (
                       <div
                         key={idx}
-                        className="p-2.5 rounded-xl bg-white border border-stone-200 shadow-2xs text-center"
+                        className="p-2.5 rounded-xl bg-white border border-stone-200 shadow-2xs text-center flex flex-col justify-center min-h-[58px]"
                       >
-                        <div className="text-xs sm:text-sm font-mono font-bold text-stone-900">
-                          {m.value}
+                        <div className="text-xs sm:text-sm font-mono font-bold text-stone-900 break-words leading-tight">
+                          {m.value || '—'}
                         </div>
-                        <div className="text-[10px] text-stone-500 mt-0.5 truncate">
-                          {m.label}
+                        <div className="text-[10.5px] text-stone-600 mt-1 leading-snug break-words">
+                          {m.label || 'Specification'}
                         </div>
                       </div>
                     ))}
@@ -216,43 +219,13 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 </div>
               )}
 
-              {/* Architecture Overview */}
-              {project.architectureOverview && (
-                <div className="space-y-1.5 p-3.5 rounded-xl bg-white border border-stone-200 shadow-2xs">
-                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-stone-600" />
-                    <span>Mechanical & Enclosure Architecture</span>
-                  </h4>
-                  <p className="text-xs text-stone-600 leading-relaxed">
-                    {project.architectureOverview}
-                  </p>
-                </div>
-              )}
-
-              {/* Technical Challenges Solved */}
-              {project.challengesSolved && project.challengesSolved.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500">
-                    Engineering & DFM Challenges Solved
-                  </h4>
-                  <ul className="space-y-1.5">
-                    {project.challengesSolved.map((item, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-xs text-stone-600">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                        <span className="leading-relaxed">{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Links */}
-              {(project.githubUrl || project.liveUrl) && (
+              {/* Links (Source / CAD Repo & Product Specification) - Optional */}
+              {((project.githubUrl && project.githubUrl.trim().length > 0) || (project.liveUrl && project.liveUrl.trim().length > 0)) && (
                 <div className="pt-2 border-t border-stone-200">
-                  <div className="flex items-center gap-3 pt-2">
-                    {project.githubUrl && (
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    {project.githubUrl && project.githubUrl.trim().length > 0 && (
                       <a
-                        href={project.githubUrl}
+                        href={project.githubUrl.trim()}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-stone-600 hover:text-stone-900 font-medium transition-colors"
@@ -262,9 +235,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                         <ExternalLink className="w-3 h-3 text-stone-400" />
                       </a>
                     )}
-                    {project.liveUrl && (
+                    {project.liveUrl && project.liveUrl.trim().length > 0 && (
                       <a
-                        href={project.liveUrl}
+                        href={project.liveUrl.trim()}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"

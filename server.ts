@@ -157,6 +157,56 @@ async function startServer() {
     }
   });
 
+  // Upload custom image endpoint
+  app.post('/api/upload-image', async (req, res) => {
+    try {
+      const fs = await import('fs');
+      const { fileBase64, fileName } = req.body;
+      if (!fileBase64) {
+        return res.status(400).json({ error: 'No image data provided' });
+      }
+
+      // Detect extension from data URL or original filename
+      let ext = 'png';
+      const mimeMatch = fileBase64.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,/);
+      if (mimeMatch && mimeMatch[1]) {
+        ext = mimeMatch[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+      } else if (fileName && fileName.includes('.')) {
+        ext = fileName.split('.').pop() || 'png';
+      }
+
+      const base64Data = fileBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '').replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      const publicDir = path.join(process.cwd(), 'public');
+      const uploadsDir = path.join(publicDir, 'uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const safeBaseName = (fileName ? fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_') : 'image').slice(0, 32);
+      const uniqueFileName = `${Date.now()}_${safeBaseName}.${ext}`;
+      const targetPath = path.join(uploadsDir, uniqueFileName);
+      fs.writeFileSync(targetPath, buffer);
+
+      // Also mirror into dist/uploads if dist exists
+      const distDir = path.join(process.cwd(), 'dist');
+      if (fs.existsSync(distDir)) {
+        const distUploads = path.join(distDir, 'uploads');
+        if (!fs.existsSync(distUploads)) {
+          fs.mkdirSync(distUploads, { recursive: true });
+        }
+        fs.writeFileSync(path.join(distUploads, uniqueFileName), buffer);
+      }
+
+      const publicUrl = `/uploads/${uniqueFileName}`;
+      return res.json({ success: true, url: publicUrl });
+    } catch (err) {
+      console.error('Failed to save image:', err);
+      return res.status(500).json({ error: 'Failed to save image' });
+    }
+  });
+
   // API routes
   app.post('/api/auth', (req, res) => {
     const { email, passkey } = req.body;
