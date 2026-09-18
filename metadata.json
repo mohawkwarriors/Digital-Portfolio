@@ -1,0 +1,6 @@
+{
+  "name": "Digital Portfolio",
+  "description": "Portfolio of Mohammed Saahir Essa, Product Design Engineer specializing in high-volume consumer hardware, Next Gen Pixel, Pixel 10 Pro, and Pixel 8.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
