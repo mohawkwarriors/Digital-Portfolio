@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './authClient';
+
 /**
  * Utility for uploading images to the local server or converting to base64 Data URL.
  */
@@ -9,7 +11,10 @@ export async function uploadImageFile(file: File): Promise<string> {
       try {
         const res = await fetch('/api/upload-image', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          },
           body: JSON.stringify({
             fileBase64: base64Data,
             fileName: file.name

@@ -1,5 +1,7 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 
@@ -112,10 +114,124 @@ async function startServer() {
 
   app.use(express.static(publicPath));
 
-  // Upload custom PDF resume
-  app.post('/api/upload-resume', async (req, res) => {
+  // --- Cryptographically Secure Session & Authentication Management ---
+  const validEmail = (process.env.ADMIN_EMAIL || 'saahiressa@gmail.com').toLowerCase();
+  const authConfigFile = path.join(process.cwd(), '.admin_auth.json');
+  const sessionsFile = path.join(process.cwd(), '.sessions.json');
+
+  interface SessionInfo {
+    token: string;
+    email: string;
+    createdAt: number;
+    expiresAt: number;
+    ip: string;
+  }
+
+  const activeSessions = new Map<string, SessionInfo>();
+
+  // Load existing persistent sessions on startup
+  try {
+    if (fs.existsSync(sessionsFile)) {
+      const saved = JSON.parse(fs.readFileSync(sessionsFile, 'utf8'));
+      const now = Date.now();
+      if (Array.isArray(saved)) {
+        saved.forEach((s: SessionInfo) => {
+          if (s && s.token && s.expiresAt > now) {
+            activeSessions.set(s.token, s);
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read .sessions.json:', e);
+  }
+
+  function saveSessionsToFile() {
     try {
-      const fs = await import('fs');
+      const now = Date.now();
+      const valid = Array.from(activeSessions.values()).filter((s) => s.expiresAt > now);
+      fs.writeFileSync(sessionsFile, JSON.stringify(valid, null, 2), 'utf8');
+    } catch (e) {
+      console.warn('Could not write .sessions.json:', e);
+    }
+  }
+
+  // Load valid passkeys (from env and secure stored config)
+  function getAcceptablePasskeys(): string[] {
+    const list: string[] = [];
+    if (process.env.ADMIN_PASSKEY) {
+      list.push(process.env.ADMIN_PASSKEY);
+    }
+    // Default system passkey
+    list.push('Saahir2026');
+
+    try {
+      if (fs.existsSync(authConfigFile)) {
+        const stored = JSON.parse(fs.readFileSync(authConfigFile, 'utf8'));
+        if (stored && typeof stored.passkey === 'string' && stored.passkey.trim()) {
+          list.unshift(stored.passkey.trim());
+        }
+      }
+    } catch (_) {}
+
+    return Array.from(new Set(list.filter(Boolean)));
+  }
+
+  // Timing-safe password verification using SHA-256 fixed-length buffers
+  function timingSafePasskeyCheck(input: string, candidate: string): boolean {
+    if (!input || !candidate) return false;
+    const hashA = crypto.createHash('sha256').update(input).digest();
+    const hashB = crypto.createHash('sha256').update(candidate).digest();
+    return crypto.timingSafeEqual(hashA, hashB);
+  }
+
+  // Rate Limiting and Anti-Brute-Force defense
+  interface RateLimitRecord {
+    attempts: number;
+    lockedUntil: number;
+    lastAttempt: number;
+  }
+  const rateLimits = new Map<string, RateLimitRecord>();
+
+  function getClientIp(req: express.Request): string {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') {
+      return forwarded.split(',')[0].trim();
+    }
+    return req.ip || req.socket.remoteAddress || '127.0.0.1';
+  }
+
+  // Express middleware to protect sensitive edit and upload endpoints
+  const requireAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : (req.headers['x-auth-token'] as string);
+
+    if (!token) {
+      return res.status(401).json({
+        error: 'Unauthorized: Valid owner session token required. Please log in.'
+      });
+    }
+
+    const session = activeSessions.get(token);
+    if (!session || Date.now() > session.expiresAt) {
+      if (session) {
+        activeSessions.delete(token);
+        saveSessionsToFile();
+      }
+      return res.status(401).json({
+        error: 'Unauthorized: Session expired or invalid. Please log in again.'
+      });
+    }
+
+    (req as any).session = session;
+    next();
+  };
+
+  // Upload custom PDF resume (Protected by requireAuth)
+  app.post('/api/upload-resume', requireAuth, async (req, res) => {
+    try {
       const { fileBase64 } = req.body;
       if (!fileBase64) {
         return res.status(400).json({ error: 'No PDF data provided' });
@@ -157,10 +273,9 @@ async function startServer() {
     }
   });
 
-  // Upload custom image endpoint
-  app.post('/api/upload-image', async (req, res) => {
+  // Upload custom image endpoint (Protected by requireAuth)
+  app.post('/api/upload-image', requireAuth, async (req, res) => {
     try {
-      const fs = await import('fs');
       const { fileBase64, fileName } = req.body;
       if (!fileBase64) {
         return res.status(400).json({ error: 'No image data provided' });
@@ -207,55 +322,180 @@ async function startServer() {
     }
   });
 
-  // API routes
-  app.post('/api/auth', (req, res) => {
-    const { email, passkey } = req.body;
-    
-    // Server-side securely stored credentials from environment variables
-    const validEmail = process.env.ADMIN_EMAIL || 'saahiressa@gmail.com';
-    const envPasskey = process.env.ADMIN_PASSKEY || 'Saahir2026';
+  // Secure Authentication Endpoint with Rate Limiting & Cryptographic Tokens
+  app.post('/api/auth', async (req, res) => {
+    const ip = getClientIp(req);
+    const now = Date.now();
 
-    const cleanEmail = (typeof email === 'string' && email.trim() !== '') 
-      ? email.trim().toLowerCase() 
-      : validEmail.toLowerCase();
+    // Check rate limit status
+    let rateRecord = rateLimits.get(ip);
+    if (rateRecord) {
+      if (rateRecord.lockedUntil > now) {
+        const minutesLeft = Math.ceil((rateRecord.lockedUntil - now) / 60000);
+        return res.status(429).json({
+          success: false,
+          locked: true,
+          retryAfterMinutes: minutesLeft,
+          message: `Too many failed login attempts. Temporarily locked for ${minutesLeft} more minute(s) to protect portfolio integrity.`
+        });
+      }
+      // Reset if previous attempts were long ago
+      if (now - rateRecord.lastAttempt > 30 * 60 * 1000) {
+        rateLimits.delete(ip);
+        rateRecord = undefined;
+      }
+    }
+
+    const { email, passkey, rememberMe } = req.body;
+    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
     const cleanPasskey = typeof passkey === 'string' ? passkey.trim() : '';
 
-    const acceptablePasskeys = [
-      envPasskey,
-      'Saahir2026',
-      'saahir2026',
-      's44h1r2026!P@ss',
-      'saahir2026!Pass',
-      'saahir2026!P@ss'
-    ];
+    const acceptablePasskeys = getAcceptablePasskeys();
+    const isEmailValid = cleanEmail === validEmail;
+    const isPasskeyValid = isEmailValid && acceptablePasskeys.some((cand) => timingSafePasskeyCheck(cleanPasskey, cand));
 
-    const isAuthorized = 
-      cleanEmail === validEmail.toLowerCase() &&
-      acceptablePasskeys.some(
-        key => key && (cleanPasskey === key || cleanPasskey.toLowerCase() === key.toLowerCase())
-      );
+    if (!isPasskeyValid) {
+      // Artificial delay (350ms) to thwart automated timing/brute-force attacks
+      await new Promise((resolve) => setTimeout(resolve, 350));
 
-    if (isAuthorized) {
-      res.json({ success: true, email: validEmail });
-    } else {
-      res.status(401).json({ success: false, message: 'Incorrect email or passkey' });
+      if (!rateRecord) {
+        rateRecord = { attempts: 1, lockedUntil: 0, lastAttempt: now };
+      } else {
+        rateRecord.attempts += 1;
+        rateRecord.lastAttempt = now;
+      }
+
+      const MAX_ATTEMPTS = 5;
+      if (rateRecord.attempts >= MAX_ATTEMPTS) {
+        rateRecord.lockedUntil = now + 15 * 60 * 1000; // 15 min lockout
+        rateLimits.set(ip, rateRecord);
+        return res.status(429).json({
+          success: false,
+          locked: true,
+          retryAfterMinutes: 15,
+          message: 'Too many failed attempts. Login temporarily locked for 15 minutes.'
+        });
+      }
+
+      rateLimits.set(ip, rateRecord);
+      const remaining = MAX_ATTEMPTS - rateRecord.attempts;
+      return res.status(401).json({
+        success: false,
+        message: `Incorrect passkey. ${remaining} attempt(s) remaining before a 15-minute security lockout.`,
+        remainingAttempts: remaining
+      });
     }
+
+    // Success: Clear failed attempts
+    rateLimits.delete(ip);
+
+    // Issue cryptographic 256-bit session token
+    const token = crypto.randomBytes(32).toString('hex');
+    // Session lifetime: 30 days if rememberMe, otherwise 24 hours
+    const duration = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const expiresAt = now + duration;
+
+    const sessionData: SessionInfo = {
+      token,
+      email: validEmail,
+      createdAt: now,
+      expiresAt,
+      ip
+    };
+
+    activeSessions.set(token, sessionData);
+    saveSessionsToFile();
+
+    return res.json({
+      success: true,
+      token,
+      email: validEmail,
+      expiresAt,
+      message: 'Authenticated successfully'
+    });
   });
 
-  // Dynamic passkey update endpoint
-  app.post('/api/update-passkey', (req, res) => {
-    const { newPasskey } = req.body;
-    if (typeof newPasskey === 'string' && newPasskey.trim().length >= 4) {
-      process.env.ADMIN_PASSKEY = newPasskey.trim();
-      return res.json({ success: true, message: 'Passkey updated' });
+  // Verify Active Session
+  app.get('/api/auth/session', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : (req.headers['x-auth-token'] as string);
+
+    if (!token) {
+      return res.json({ authenticated: false });
     }
-    return res.status(400).json({ error: 'Passkey must be at least 4 characters long' });
+
+    const session = activeSessions.get(token);
+    if (!session || Date.now() > session.expiresAt) {
+      if (session) {
+        activeSessions.delete(token);
+        saveSessionsToFile();
+      }
+      return res.json({ authenticated: false });
+    }
+
+    return res.json({
+      authenticated: true,
+      email: session.email,
+      expiresAt: session.expiresAt
+    });
   });
 
-  // Sync edits made via UI directly into source file src/data/initialData.ts
-  app.post('/api/sync-data', async (req, res) => {
+  // Invalidate Session / Logout
+  app.post('/api/auth/logout', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : (req.headers['x-auth-token'] as string);
+
+    if (token) {
+      activeSessions.delete(token);
+      saveSessionsToFile();
+    }
+    return res.json({ success: true, message: 'Logged out successfully' });
+  });
+
+  // Dynamic passkey update endpoint (Protected by requireAuth + old passkey verification)
+  app.post('/api/update-passkey', requireAuth, (req, res) => {
+    const { currentPasskey, newPasskey } = req.body;
+    if (typeof newPasskey !== 'string' || newPasskey.trim().length < 6) {
+      return res.status(400).json({ error: 'New passkey must be at least 6 characters long' });
+    }
+
+    // Must verify current passkey
+    const acceptable = getAcceptablePasskeys();
+    const isCurrentValid = typeof currentPasskey === 'string' && acceptable.some((cand) => timingSafePasskeyCheck(currentPasskey.trim(), cand));
+    if (!isCurrentValid) {
+      return res.status(401).json({ error: 'Current passkey is incorrect. Verification failed.' });
+    }
+
+    const cleanNewPasskey = newPasskey.trim();
+    process.env.ADMIN_PASSKEY = cleanNewPasskey;
+
     try {
-      const fs = await import('fs');
+      fs.writeFileSync(
+        authConfigFile,
+        JSON.stringify(
+          {
+            passkey: cleanNewPasskey,
+            updatedAt: new Date().toISOString()
+          },
+          null,
+          2
+        ),
+        'utf8'
+      );
+    } catch (e) {
+      console.error('Failed to write .admin_auth.json:', e);
+    }
+
+    return res.json({ success: true, message: 'Passkey updated successfully' });
+  });
+
+  // Sync edits made via UI directly into source file src/data/initialData.ts (Protected by requireAuth)
+  app.post('/api/sync-data', requireAuth, async (req, res) => {
+    try {
       const { profile, experienceNodes, projects, skills, sections } = req.body;
       if (!profile) {
         return res.status(400).json({ error: 'Invalid profile data' });

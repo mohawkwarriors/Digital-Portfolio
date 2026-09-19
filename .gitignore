@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 bun.lock
+.sessions.json
+.admin_auth.json
