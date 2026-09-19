@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion, useScroll, useSpring } from 'motion/react';
+import { motion, useSpring, useMotionValue } from 'motion/react';
 import { User, Briefcase, Box, Wrench, Compass, FileText } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { SectionConfig } from '../types';
@@ -28,10 +28,10 @@ const getChapterIcon = (type: string, id: string) => {
 };
 
 export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, {
-    stiffness: 250,
-    damping: 30,
+  const scrollProgress = useMotionValue(0);
+  const scaleX = useSpring(scrollProgress, {
+    stiffness: 140,
+    damping: 24,
     restDelta: 0.001
   });
 
@@ -47,58 +47,80 @@ export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
   }, [sections]);
 
   const [activeIndex, setActiveIndex] = useState<number>(0);
-  const [chapterPositions, setChapterPositions] = useState<number[]>([]);
+
+  // Stably anchored chapter positions — never jitter or jump when accordions open/close
+  const chapterPositions = useMemo(() => {
+    if (chapters.length <= 1) return [0];
+    return chapters.map((_, idx) => (idx / (chapters.length - 1)) * 100);
+  }, [chapters]);
 
   const HEADER_OFFSET = 80;
 
-  const updateMeasurements = useCallback(() => {
-    if (chapters.length === 0) return;
-    const viewportHeight = window.innerHeight;
-    const docHeight = document.documentElement.scrollHeight;
-    const maxScroll = Math.max(1, docHeight - viewportHeight);
-
-    const positions = chapters.map((ch, idx) => {
-      if (idx === 0) return 0;
-      if (idx === chapters.length - 1) return 100;
-      const el = document.getElementById(ch.targetId);
-      if (!el) return (idx / (chapters.length - 1)) * 100;
-      const triggerScroll = Math.max(0, el.offsetTop - HEADER_OFFSET);
-      return Math.min(100, Math.max(0, (triggerScroll / maxScroll) * 100));
-    });
-
-    setChapterPositions(positions);
-  }, [chapters]);
-
-  const updateActiveIndex = useCallback(() => {
+  const updateProgressAndActive = useCallback(() => {
     if (chapters.length === 0) return;
     const scrollY = window.scrollY;
     const viewportHeight = window.innerHeight;
     const docHeight = document.documentElement.scrollHeight;
 
+    // If reached the bottom of page, clamp to 100%
     if (scrollY + viewportHeight >= docHeight - 30) {
       setActiveIndex(chapters.length - 1);
+      scrollProgress.set(1);
       return;
     }
 
+    const N = chapters.length;
+    const sectionData = chapters.map((ch) => {
+      const el = document.getElementById(ch.targetId);
+      if (!el) return { top: 0, height: 500 };
+      return {
+        top: Math.max(0, el.offsetTop - HEADER_OFFSET),
+        height: el.offsetHeight || 500
+      };
+    });
+
+    // Determine active index
     let current = 0;
-    for (let i = chapters.length - 1; i >= 0; i--) {
-      const el = document.getElementById(chapters[i].targetId);
-      if (!el) continue;
-      if (scrollY >= el.offsetTop - (HEADER_OFFSET + 10)) {
+    for (let i = N - 1; i >= 0; i--) {
+      if (scrollY >= sectionData[i].top - 15) {
         current = i;
         break;
       }
     }
-
     setActiveIndex(current);
-  }, [chapters]);
+
+    // If above or at the very first section
+    if (N <= 1 || scrollY <= sectionData[0].top) {
+      scrollProgress.set(0);
+      return;
+    }
+
+    // Smooth section-anchored progress: prevents jumping back when an accordion changes document height
+    let progress = 0;
+    for (let i = 0; i < N - 1; i++) {
+      const curTop = sectionData[i].top;
+      const nextTop = sectionData[i + 1].top;
+      if (scrollY >= curTop && scrollY < nextTop) {
+        const span = Math.max(1, nextTop - curTop);
+        const ratio = Math.min(1, Math.max(0, (scrollY - curTop) / span));
+        const start = i / (N - 1);
+        const end = (i + 1) / (N - 1);
+        progress = start + ratio * (end - start);
+        break;
+      } else if (scrollY >= nextTop && i === N - 2) {
+        progress = 1;
+      }
+    }
+
+    scrollProgress.set(progress);
+  }, [chapters, scrollProgress]);
 
   useEffect(() => {
     let ticking = false;
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          updateActiveIndex();
+          updateProgressAndActive();
           ticking = false;
         });
         ticking = true;
@@ -106,25 +128,22 @@ export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', () => {
-      updateMeasurements();
-      updateActiveIndex();
-    }, { passive: true });
-    
-    updateMeasurements();
-    updateActiveIndex();
-    
-    const timer = setTimeout(() => {
-      updateMeasurements();
-      updateActiveIndex();
-    }, 600);
+    window.addEventListener('resize', handleScroll, { passive: true });
+
+    // Also observe DOM height changes (e.g. when card collapses/expands) smoothly
+    const observer = new ResizeObserver(() => {
+      handleScroll();
+    });
+    observer.observe(document.body);
+
+    handleScroll();
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', updateMeasurements);
-      clearTimeout(timer);
+      window.removeEventListener('resize', handleScroll);
+      observer.disconnect();
     };
-  }, [updateActiveIndex, updateMeasurements, chapters]);
+  }, [updateProgressAndActive]);
 
   const handleChapterClick = (targetId: string) => {
     const el = document.getElementById(targetId);
@@ -149,7 +168,7 @@ export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
         <div className="flex items-center justify-between gap-4 sm:gap-6">
           
           {/* Main Navigation Track (Chapter Titles + Progress Bar together - stops before ThemeToggle) */}
-          <div className="flex-1 space-y-1.5 min-w-0">
+          <div className="flex-1 space-y-1.5 min-w-0 px-4 sm:px-8">
             
             {/* Chapter Labels Track */}
             <div className="relative h-6 w-full text-sm">
@@ -157,13 +176,6 @@ export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
                 const isActive = activeIndex === idx;
                 const pos = chapterPositions[idx] ?? (idx / (chapters.length - 1)) * 100;
                 const ChapterIcon = getChapterIcon(chapter.type, chapter.id);
-                
-                let alignClass = "-translate-x-1/2";
-                if (idx === 0) {
-                  alignClass = "translate-x-0";
-                } else if (idx === chapters.length - 1) {
-                  alignClass = "-translate-x-full";
-                }
 
                 return (
                   <button
@@ -171,15 +183,15 @@ export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
                     id={`chapter-btn-${chapter.id}`}
                     onClick={() => handleChapterClick(chapter.targetId)}
                     type="button"
-                    className={`absolute top-0 group text-left py-0.5 focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 rounded transition-all duration-200 cursor-pointer ${alignClass}`}
+                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 group text-center focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500 rounded transition-all duration-200 cursor-pointer"
                     style={{ left: `${pos}%` }}
                     title={`Chapter ${chapter.num}: ${chapter.label}`}
                     aria-label={`Chapter ${chapter.num}: ${chapter.label}`}
                   >
-                    <div className="flex items-center gap-1 sm:gap-1.5 whitespace-nowrap">
+                    <div className="inline-flex items-baseline justify-center gap-1.5 whitespace-nowrap leading-none">
                       {/* Mobile: Space-efficient icon */}
                       <div
-                        className={`sm:hidden flex items-center justify-center p-0.5 rounded transition-all duration-150 ${
+                        className={`sm:hidden flex items-center justify-center p-0.5 rounded transition-all duration-150 self-center ${
                           isActive
                             ? 'text-blue-600 dark:text-blue-400 scale-110'
                             : 'text-stone-400 dark:text-stone-500 group-hover:text-stone-700 dark:group-hover:text-stone-300'
@@ -188,21 +200,21 @@ export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
                         <ChapterIcon className="w-3.5 h-3.5" />
                       </div>
 
-                      {/* Desktop: Number + Full Section Title */}
+                      {/* Desktop: Number + Full Section Title perfectly aligned by baseline */}
                       <span
-                        className={`hidden sm:inline text-[10px] font-mono tracking-tight transition-all duration-150 ${
+                        className={`hidden sm:inline-block text-xs font-mono tracking-tight leading-none align-baseline transition-colors duration-150 ${
                           isActive
                             ? 'text-blue-600 dark:text-blue-400 font-bold'
-                            : 'text-stone-400 dark:text-stone-500 group-hover:text-stone-600 dark:group-hover:text-stone-300 font-normal'
+                            : 'text-stone-400 dark:text-stone-500 group-hover:text-stone-600 dark:group-hover:text-stone-300 font-medium'
                         }`}
                       >
                         {chapter.num}
                       </span>
                       <span
-                        className={`hidden sm:inline text-xs tracking-tight transition-all duration-150 ${
+                        className={`hidden sm:inline-block text-xs tracking-tight leading-none align-baseline transition-colors duration-150 ${
                           isActive
-                            ? 'text-stone-950 dark:text-stone-50 font-bold scale-105'
-                            : 'text-stone-500 dark:text-stone-400 font-normal group-hover:text-stone-800 dark:group-hover:text-stone-200'
+                            ? 'text-stone-950 dark:text-stone-50 font-bold'
+                            : 'text-stone-500 dark:text-stone-400 font-medium group-hover:text-stone-800 dark:group-hover:text-stone-200'
                         }`}
                       >
                         {chapter.label}

@@ -91,6 +91,8 @@ export const initialExperienceNodes: ExperienceFlowNode[] = [
     id: "role-1789621261802-hvise",
     company: "Culture Biosciences",
     companyLogoUrl: "https://ml.globenewswire.com/Resource/Download/ce8c1148-eecd-40b0-b1b7-f858ab8c3c4f",
+    companyLogoInvertInDark: true,
+    companyLogoContrast: "invert-in-dark",
     location: "South San Francisco, CA",
     role: "Lead mechanical engineer for R&D 250L pilot scale bioreactor",
     period: "2021-2022",
@@ -109,6 +111,8 @@ export const initialExperienceNodes: ExperienceFlowNode[] = [
     id: "exp-1789343187098",
     company: "Culture Biosciences",
     companyLogoUrl: "https://ml.globenewswire.com/Resource/Download/ce8c1148-eecd-40b0-b1b7-f858ab8c3c4f",
+    companyLogoInvertInDark: true,
+    companyLogoContrast: "invert-in-dark",
     location: "South San Francisco, CA",
     role: "Developed custom electronic devices to improve safety and efficiency in biological labs",
     period: "2021 –2022",
@@ -152,6 +156,16 @@ export const initialProjects: Project[] = [
       }
     ],
     techStack: [],
+    links: [
+      {
+        label: "Company Website",
+        url: "https://dreamharvestfarms.com"
+      },
+      {
+        label: "Product Specification & CAD",
+        url: "https://example.com/hardware/aura-one"
+      }
+    ],
     liveUrl: "https://example.com/hardware/aura-one",
     githubUrl: "https://github.com/example/aura-headset-specs",
     featured: true,

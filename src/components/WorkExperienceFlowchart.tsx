@@ -24,17 +24,17 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
   // Track expanded state for extra details
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
 
+  const HEADER_OFFSET = 80;
+
   const toggleExpand = (id: string) => {
     const isCurrentlyExpanded = !!expandedNodes[id];
     if (isCurrentlyExpanded) {
-      // If collapsing while scrolled down, anchor viewport to the milestone top
-      // so the page doesn't jump down into subsequent sections
       const el = document.getElementById(`exp-node-${id}`);
       if (el) {
         const rect = el.getBoundingClientRect();
-        if (rect.top < 80) {
-          const targetY = Math.max(0, window.scrollY + rect.top - 80);
-          window.scrollTo({ top: targetY, behavior: 'smooth' });
+        if (rect.top < HEADER_OFFSET) {
+          const targetY = Math.max(0, window.scrollY + rect.top - HEADER_OFFSET);
+          window.scrollTo({ top: targetY, behavior: 'instant' });
         }
       }
     }
@@ -44,22 +44,42 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
     }));
   };
 
+  const anchorSectionOnCollapse = (cardEl: HTMLElement | null, sectionEl: HTMLElement | null, offset: number = HEADER_OFFSET) => {
+    if (!cardEl) return;
+    const cardRect = cardEl.getBoundingClientRect();
+    
+    // If the top of this card was scrolled above the header, smoothly anchor to card header
+    if (cardRect.top < offset) {
+      const targetY = Math.max(0, window.scrollY + cardRect.top - offset);
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
+      return;
+    }
+
+    // If collapsing the card would cause the section to pull up and expose the next section (Projects)
+    if (sectionEl) {
+      const sectionRect = sectionEl.getBoundingClientRect();
+      const cardHeight = cardEl.offsetHeight;
+      const collapsedEstimate = 130;
+      const deltaH = Math.max(0, cardHeight - collapsedEstimate);
+      const futureBottom = sectionRect.bottom - deltaH;
+      if (futureBottom < window.innerHeight) {
+        const overshoot = window.innerHeight - futureBottom;
+        const targetY = Math.max(0, window.scrollY - overshoot);
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      }
+    }
+  };
+
   const toggleGroupExpand = (nodesInGroup: ExperienceFlowNode[], company: string) => {
     // If ANY node in the group is expanded, collapse all.
     // If NO nodes are expanded, expand all.
     const isAnyExpanded = nodesInGroup.some(node => expandedNodes[node.id]);
     
     if (isAnyExpanded) {
-      // If collapsing while scrolled down, anchor viewport to company group header
       const groupId = `exp-group-${company.replace(/\s+/g, '-').toLowerCase()}`;
       const el = document.getElementById(groupId);
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        if (rect.top < 80) {
-          const targetY = Math.max(0, window.scrollY + rect.top - 80);
-          window.scrollTo({ top: targetY, behavior: 'smooth' });
-        }
-      }
+      const sec = document.getElementById('experience');
+      anchorSectionOnCollapse(el, sec, HEADER_OFFSET);
     }
 
     setExpandedNodes(prev => {
@@ -84,14 +104,16 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
 
   const handleGroupMouseLeave = (nodesInGroup: ExperienceFlowNode[], company: string) => {
     if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    
+    // Check if this group was actually expanded
+    const isAnyExpanded = nodesInGroup.some(node => !!expandedNodes[node.id]);
+    if (!isAnyExpanded) return;
+
     const groupId = `exp-group-${company.replace(/\s+/g, '-').toLowerCase()}`;
     const el = document.getElementById(groupId);
-    if (el) {
-      const rect = el.getBoundingClientRect();
-      // If the user has scrolled down into this card (top of card is scrolled up above viewport),
-      // do NOT auto-collapse on mouse leave! This prevents involuntary jumps into Skills mid-scroll.
-      if (rect.top < 60) return;
-    }
+    const sec = document.getElementById('experience');
+    anchorSectionOnCollapse(el, sec, HEADER_OFFSET);
+
     setExpandedNodes(prev => {
       const next = { ...prev };
       nodesInGroup.forEach(node => {
@@ -99,6 +121,19 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
       });
       return next;
     });
+  };
+
+  const getLogoFilterClass = (contrast?: 'none' | 'invert-in-dark' | 'invert-in-light', invertInDark?: boolean, companyName?: string) => {
+    if (contrast === 'invert-in-dark' || invertInDark) {
+      return 'dark:brightness-0 dark:invert';
+    }
+    if (contrast === 'invert-in-light') {
+      return 'brightness-0 dark:filter-none';
+    }
+    if (companyName && /culture/i.test(companyName)) {
+      return 'dark:brightness-0 dark:invert';
+    }
+    return '';
   };
 
   // Sort nodes based on order (newest first)
@@ -109,13 +144,35 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
   });
 
   // Group nodes by company while preserving the general order (newest first)
-  const groupedExperiences: { company: string; companyLogoUrl?: string; location: string; startYear: number; endYear: number | 'Present'; nodes: ExperienceFlowNode[] }[] = [];
+  const groupedExperiences: { 
+    company: string; 
+    companyLogoUrl?: string; 
+    companyLogoInvertInDark?: boolean;
+    companyLogoContrast?: 'none' | 'invert-in-dark' | 'invert-in-light';
+    location: string; 
+    startYear: number; 
+    endYear: number | 'Present'; 
+    nodes: ExperienceFlowNode[] 
+  }[] = [];
   
   sortedNodes.forEach(node => {
     // Attempt to find an existing group for this company
     const existingGroup = groupedExperiences.find(g => g.company.trim().toLowerCase() === node.company.trim().toLowerCase());
+    const isCulture = node.company?.toLowerCase().includes('culture');
+    const invertInDark = node.companyLogoInvertInDark ?? isCulture;
+    const contrast = node.companyLogoContrast || (invertInDark ? 'invert-in-dark' : 'none');
+
     if (existingGroup) {
       existingGroup.nodes.push(node);
+      if (node.companyLogoUrl && !existingGroup.companyLogoUrl) {
+        existingGroup.companyLogoUrl = node.companyLogoUrl;
+      }
+      if (node.companyLogoInvertInDark !== undefined) {
+        existingGroup.companyLogoInvertInDark = node.companyLogoInvertInDark;
+      }
+      if (node.companyLogoContrast) {
+        existingGroup.companyLogoContrast = node.companyLogoContrast;
+      }
       // Update startYear to the earliest
       if (node.startYear < existingGroup.startYear) {
         existingGroup.startYear = node.startYear;
@@ -130,6 +187,8 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
       groupedExperiences.push({ 
         company: node.company, 
         companyLogoUrl: node.companyLogoUrl,
+        companyLogoInvertInDark: invertInDark,
+        companyLogoContrast: contrast,
         location: node.location, 
         startYear: node.startYear,
         endYear: node.endYear,
@@ -139,7 +198,7 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
   });
 
   return (
-    <section id="experience" className="py-12 md:py-16 border-b border-stone-200 dark:border-stone-800">
+    <section id="experience" className="py-12 md:py-16 border-b border-stone-200 dark:border-stone-800" style={{ overflowAnchor: 'none' }}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8">
         
         {/* Section Header */}
@@ -156,7 +215,7 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
         </motion.div>
 
         {/* EXPERIENCE CARDS */}
-        <div id="experience-flowchart-container" className="relative py-2">
+        <div id="experience-flowchart-container" className="relative py-2" style={{ overflowAnchor: 'none' }}>
           {groupedExperiences.length === 0 ? (
             <div className="bg-stone-50 dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 p-8 text-center text-stone-500 text-sm">
               No career milestones found.
@@ -171,16 +230,23 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                   <motion.div 
                     key={group.company}
                     id={groupDomId}
+                    layout="position"
                     initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: '-50px' }}
-                    transition={{ duration: 0.5, delay: idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{ 
+                      duration: 0.5, 
+                      delay: idx * 0.1, 
+                      ease: [0.16, 1, 0.3, 1],
+                      layout: { duration: 0.35, ease: [0.16, 1, 0.3, 1] }
+                    }}
                     onMouseEnter={() => handleGroupMouseEnter(group.nodes)}
                     onMouseLeave={() => handleGroupMouseLeave(group.nodes, group.company)}
-                    className={`bg-white dark:bg-[#1a1a1e] rounded-2xl border-2 border-stone-200/90 dark:border-stone-700/90 overflow-hidden shadow-md dark:shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6)] transition-all duration-300 ease-out origin-center ${
+                    style={{ overflowAnchor: 'none' }}
+                    className={`group/card bg-white dark:bg-[#1a1a1e] rounded-2xl border-2 border-stone-200/90 dark:border-stone-700/90 overflow-hidden shadow-md dark:shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6)] transition-all duration-300 ease-out origin-center ${
                       isThisGroupExpanded 
-                        ? 'scale-[1.01] shadow-xl dark:shadow-[0_12px_36px_-4px_rgba(0,0,0,0.85)] ring-2 ring-stone-900/10 dark:ring-stone-400/20 border-stone-400 dark:border-stone-500 relative z-20' 
-                        : 'relative z-10 hover:border-stone-300 dark:hover:border-stone-600 hover:shadow-lg'
+                        ? 'scale-[1.006] shadow-xl dark:shadow-[0_12px_36px_-4px_rgba(0,0,0,0.85)] ring-2 ring-stone-900/10 dark:ring-stone-400/20 border-stone-400 dark:border-stone-500 relative z-20' 
+                        : 'relative z-10 hover:border-stone-300 dark:hover:border-stone-600 hover:shadow-lg hover:scale-[1.004]'
                     }`}
                   >
                   {/* Group Header - Clickable with high-contrast background */}
@@ -198,14 +264,20 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                   >
                     <div>
                       {group.companyLogoUrl ? (
-                        <img 
-                          src={group.companyLogoUrl} 
-                          alt={group.company} 
-                          className="h-7 w-auto object-contain object-left mb-1.5"
-                          loading="lazy"
-                        />
+                        <div className="h-7 flex items-center mb-1.5">
+                          <img 
+                            src={group.companyLogoUrl} 
+                            alt={group.company} 
+                            className={`h-7 w-auto object-contain object-left transition-all duration-250 ease-out origin-left group-hover/card:scale-108 drop-shadow-none group-hover/card:drop-shadow-[0_4px_8px_rgba(0,0,0,0.12)] dark:group-hover/card:drop-shadow-[0_4px_10px_rgba(255,255,255,0.2)] ${getLogoFilterClass(
+                              group.companyLogoContrast,
+                              group.companyLogoInvertInDark,
+                              group.company
+                            )}`}
+                            loading="lazy"
+                          />
+                        </div>
                       ) : (
-                        <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100 group-hover/header:text-blue-600 dark:group-hover/header:text-blue-400 transition-colors">
+                        <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100 transition-colors group-hover/header:text-blue-600 dark:group-hover/header:text-blue-400">
                           {group.company}
                         </h3>
                       )}
@@ -280,7 +352,10 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                                   initial={{ opacity: 0, height: 0 }}
                                   animate={{ opacity: 1, height: 'auto' }}
                                   exit={{ opacity: 0, height: 0 }}
-                                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                                  transition={{ 
+                                    height: { duration: 0.32, ease: [0.16, 1, 0.3, 1] },
+                                    opacity: { duration: 0.22, ease: 'easeOut' }
+                                  }}
                                   className="overflow-hidden"
                                 >
                                   <div className="pt-5 mt-4 border-t-2 border-stone-100 dark:border-stone-800/80">

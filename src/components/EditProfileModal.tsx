@@ -33,6 +33,7 @@ import { AUTHORIZED_OWNER_EMAIL, DEFAULT_OWNER_PASSKEY } from './AuthModal';
 import { saveResumePdf, getResumePdf, clearResumePdf, StoredPdfRecord } from '../utils/pdfStorage';
 import { ImageUploadField } from './ImageUploadField';
 import { MultiImageGalleryUpload } from './MultiImageGalleryUpload';
+import { normalizeProjectLinks } from '../utils/projectLinks';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -59,6 +60,8 @@ interface ExperienceCard {
   id: string;
   company: string;
   companyLogoUrl?: string;
+  companyLogoContrast?: 'none' | 'invert-in-dark' | 'invert-in-light';
+  companyLogoInvertInDark?: boolean;
   location: string;
   roles: RoleItem[];
 }
@@ -82,15 +85,24 @@ const groupNodesIntoCards = (nodes: ExperienceFlowNode[]): ExperienceCard[] => {
   nodes.forEach((node, idx) => {
     const comp = (node.company || 'Organization').trim();
     let card = cards.find(c => c.company.trim().toLowerCase() === comp.toLowerCase());
+    const isCulture = comp.toLowerCase().includes('culture');
+    const invertInDark = node.companyLogoInvertInDark ?? isCulture;
+    const contrast = node.companyLogoContrast || (invertInDark ? 'invert-in-dark' : 'none');
+
     if (!card) {
       card = {
         id: `card-${idx}-${Date.now()}`,
         company: node.company || '',
         companyLogoUrl: node.companyLogoUrl || '',
+        companyLogoContrast: contrast,
+        companyLogoInvertInDark: invertInDark,
         location: node.location || '',
         roles: []
       };
       cards.push(card);
+    } else {
+      if (node.companyLogoContrast) card.companyLogoContrast = node.companyLogoContrast;
+      if (node.companyLogoInvertInDark !== undefined) card.companyLogoInvertInDark = node.companyLogoInvertInDark;
     }
     card.roles.push({
       id: node.id || `role-${idx}-${Date.now()}`,
@@ -116,6 +128,8 @@ const flattenCardsToNodes = (cards: ExperienceCard[]): ExperienceFlowNode[] => {
         id: r.id || `exp-${Date.now()}-${Math.random().toString(36).substr(2, 7)}`,
         company: card.company.trim() || 'Organization',
         companyLogoUrl: card.companyLogoUrl?.trim() || undefined,
+        companyLogoInvertInDark: card.companyLogoContrast === 'invert-in-dark' || card.companyLogoInvertInDark === true,
+        companyLogoContrast: card.companyLogoContrast || (card.companyLogoInvertInDark ? 'invert-in-dark' : 'none'),
         location: card.location.trim() || '',
         role: r.role.trim() || 'Role / Milestone',
         period: r.period.trim() || `${startYear} – ${endYear}`,
@@ -148,7 +162,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'profile' | 'experience' | 'projects' | 'skills' | 'layout'>('profile');
   const [editedProfile, setEditedProfile] = useState<Profile>({ ...profile });
   const [experienceCards, setExperienceCards] = useState<ExperienceCard[]>(() => groupNodesIntoCards(experienceNodes));
-  const [editedProjects, setEditedProjects] = useState<Project[]>([...projects]);
+  const [editedProjects, setEditedProjects] = useState<Project[]>(() =>
+    projects.map((p) => ({
+      ...p,
+      links: normalizeProjectLinks(p)
+    }))
+  );
   const [editedSkills, setEditedSkills] = useState<SkillCategory[]>([...skills]);
   const [editedSections, setEditedSections] = useState<SectionConfig[]>([...sections]);
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -233,10 +252,28 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     }
 
     const finalExperienceNodes = flattenCardsToNodes(experienceCards);
+    const finalProjects = editedProjects.map((p) => {
+      const cleanLinks = (p.links || []).filter((l) => l.url && l.url.trim().length > 0);
+      const ghLink = cleanLinks.find(
+        (l) =>
+          l.url.toLowerCase().includes('github') ||
+          l.label.toLowerCase().includes('github') ||
+          l.label.toLowerCase().includes('repo')
+      );
+      const liveLink = cleanLinks.find((l) => l !== ghLink);
+      return {
+        ...p,
+        links: cleanLinks,
+        githubUrl: ghLink ? ghLink.url : p.githubUrl || '',
+        githubUrlLabel: ghLink ? ghLink.label : p.githubUrlLabel || '',
+        liveUrl: liveLink ? liveLink.url : p.liveUrl || '',
+        liveUrlLabel: liveLink ? liveLink.label : p.liveUrlLabel || ''
+      };
+    });
     onSave({
       profile: editedProfile,
       experienceNodes: finalExperienceNodes,
-      projects: editedProjects,
+      projects: finalProjects,
       skills: editedSkills,
       sections: editedSections
     });
@@ -355,6 +392,50 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     }));
   };
 
+  const handleMoveBulletInRole = (cardId: string, roleId: string, bulletIdx: number, direction: 'up' | 'down') => {
+    setExperienceCards(prev => prev.map(c => {
+      if (c.id !== cardId) return c;
+      return {
+        ...c,
+        roles: c.roles.map(r => {
+          if (r.id !== roleId) return r;
+          const targetIdx = direction === 'up' ? bulletIdx - 1 : bulletIdx + 1;
+          if (targetIdx < 0 || targetIdx >= r.highlights.length) return r;
+          const updated = [...r.highlights];
+          const temp = updated[bulletIdx];
+          updated[bulletIdx] = updated[targetIdx];
+          updated[targetIdx] = temp;
+          return { ...r, highlights: updated };
+        })
+      };
+    }));
+  };
+
+  const handleMoveRoleInCard = (cardId: string, roleIdx: number, direction: 'up' | 'down') => {
+    setExperienceCards(prev => prev.map(c => {
+      if (c.id !== cardId) return c;
+      const targetIdx = direction === 'up' ? roleIdx - 1 : roleIdx + 1;
+      if (targetIdx < 0 || targetIdx >= c.roles.length) return c;
+      const updated = [...c.roles];
+      const temp = updated[roleIdx];
+      updated[roleIdx] = updated[targetIdx];
+      updated[targetIdx] = temp;
+      return { ...c, roles: updated };
+    }));
+  };
+
+  const handleMoveExperienceCard = (cardIdx: number, direction: 'up' | 'down') => {
+    setExperienceCards(prev => {
+      const targetIdx = direction === 'up' ? cardIdx - 1 : cardIdx + 1;
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const temp = copy[cardIdx];
+      copy[cardIdx] = copy[targetIdx];
+      copy[targetIdx] = temp;
+      return copy;
+    });
+  };
+
   const handleAddProject = () => {
     const newProj: Project = {
       id: `proj-${Date.now()}`,
@@ -370,8 +451,11 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       challengesSolved: ['Solved critical warpage or drop impact requirement'],
       metrics: [{ label: 'Yield / Metric', value: '99.4%' }],
       techStack: ['Siemens NX', 'SolidWorks', 'DFM'],
+      links: [
+        { label: 'Company Website', url: 'https://example.com' }
+      ],
       liveUrl: 'https://example.com',
-      githubUrl: 'https://github.com',
+      githubUrl: '',
       featured: true
     };
     setEditedProjects([newProj, ...editedProjects]);
@@ -442,6 +526,149 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setEditedProjects(copy);
   };
 
+  const handleMoveProject = (projectIndex: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? projectIndex - 1 : projectIndex + 1;
+    if (targetIndex < 0 || targetIndex >= editedProjects.length) return;
+    const copy = [...editedProjects];
+    const temp = copy[projectIndex];
+    copy[projectIndex] = copy[targetIndex];
+    copy[targetIndex] = temp;
+    setEditedProjects(copy);
+  };
+
+  const handleAddChallengeToProject = (projectIndex: number) => {
+    const copy = [...editedProjects];
+    const currentChallenges = copy[projectIndex].challengesSolved || [];
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      challengesSolved: [...currentChallenges, '']
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleUpdateChallengeInProject = (projectIndex: number, challengeIndex: number, value: string) => {
+    const copy = [...editedProjects];
+    const currentChallenges = [...(copy[projectIndex].challengesSolved || [])];
+    currentChallenges[challengeIndex] = value;
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      challengesSolved: currentChallenges
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleRemoveChallengeFromProject = (projectIndex: number, challengeIndex: number) => {
+    const copy = [...editedProjects];
+    const currentChallenges = [...(copy[projectIndex].challengesSolved || [])];
+    currentChallenges.splice(challengeIndex, 1);
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      challengesSolved: currentChallenges
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleMoveChallengeInProject = (projectIndex: number, challengeIndex: number, direction: 'up' | 'down') => {
+    const copy = [...editedProjects];
+    const currentChallenges = [...(copy[projectIndex].challengesSolved || [])];
+    const targetIndex = direction === 'up' ? challengeIndex - 1 : challengeIndex + 1;
+    if (targetIndex < 0 || targetIndex >= currentChallenges.length) return;
+    const temp = currentChallenges[challengeIndex];
+    currentChallenges[challengeIndex] = currentChallenges[targetIndex];
+    currentChallenges[targetIndex] = temp;
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      challengesSolved: currentChallenges
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleAddLinkToProject = (projectIndex: number, defaultLabel = 'Company Website', defaultUrl = '') => {
+    const copy = [...editedProjects];
+    const currentLinks = copy[projectIndex].links || [];
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      links: [...currentLinks, { label: defaultLabel, url: defaultUrl }]
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleUpdateLinkInProject = (
+    projectIndex: number,
+    linkIndex: number,
+    field: 'label' | 'url',
+    newValue: string
+  ) => {
+    const copy = [...editedProjects];
+    const currentLinks = [...(copy[projectIndex].links || [])];
+    if (currentLinks[linkIndex]) {
+      currentLinks[linkIndex] = {
+        ...currentLinks[linkIndex],
+        [field]: newValue
+      };
+      copy[projectIndex] = {
+        ...copy[projectIndex],
+        links: currentLinks
+      };
+      setEditedProjects(copy);
+    }
+  };
+
+  const handleRemoveLinkFromProject = (projectIndex: number, linkIndex: number) => {
+    const copy = [...editedProjects];
+    const currentLinks = [...(copy[projectIndex].links || [])];
+    currentLinks.splice(linkIndex, 1);
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      links: currentLinks
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleMoveLinkInProject = (
+    projectIndex: number,
+    linkIndex: number,
+    direction: 'up' | 'down'
+  ) => {
+    const copy = [...editedProjects];
+    const currentLinks = [...(copy[projectIndex].links || [])];
+    const targetIndex = direction === 'up' ? linkIndex - 1 : linkIndex + 1;
+    if (targetIndex < 0 || targetIndex >= currentLinks.length) return;
+    const temp = currentLinks[linkIndex];
+    currentLinks[linkIndex] = currentLinks[targetIndex];
+    currentLinks[targetIndex] = temp;
+    copy[projectIndex] = {
+      ...copy[projectIndex],
+      links: currentLinks
+    };
+    setEditedProjects(copy);
+  };
+
+  const handleMoveSkillCategory = (catIdx: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? catIdx - 1 : catIdx + 1;
+    if (targetIdx < 0 || targetIdx >= editedSkills.length) return;
+    const newSkills = [...editedSkills];
+    const temp = newSkills[catIdx];
+    newSkills[catIdx] = newSkills[targetIdx];
+    newSkills[targetIdx] = temp;
+    setEditedSkills(newSkills);
+  };
+
+  const handleMoveSkill = (catIdx: number, skillIdx: number, direction: 'up' | 'down') => {
+    const newSkills = [...editedSkills];
+    const targetIdx = direction === 'up' ? skillIdx - 1 : skillIdx + 1;
+    const skillsInCat = [...newSkills[catIdx].skills];
+    if (targetIdx < 0 || targetIdx >= skillsInCat.length) return;
+    const temp = skillsInCat[skillIdx];
+    skillsInCat[skillIdx] = skillsInCat[targetIdx];
+    skillsInCat[targetIdx] = temp;
+    newSkills[catIdx] = {
+      ...newSkills[catIdx],
+      skills: skillsInCat
+    };
+    setEditedSkills(newSkills);
+  };
+
   const handleExportJSON = () => {
     const finalExperienceNodes = flattenCardsToNodes(experienceCards);
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(
@@ -510,7 +737,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/80 backdrop-blur-xs animate-in fade-in"
-      onClick={onClose}
     >
       <div 
         className="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col text-stone-900 overflow-hidden"
@@ -1034,6 +1260,34 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                       {/* Main Card Header */}
                       <div className="flex items-center justify-between pb-3 border-b border-stone-200">
                         <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              disabled={cardIdx === 0}
+                              onClick={() => handleMoveExperienceCard(cardIdx, 'up')}
+                              className={`p-1 rounded transition-colors ${
+                                cardIdx === 0
+                                  ? 'text-stone-300 cursor-not-allowed'
+                                  : 'text-stone-500 hover:text-stone-900 hover:bg-white cursor-pointer'
+                              }`}
+                              title="Move organization up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={cardIdx === experienceCards.length - 1}
+                              onClick={() => handleMoveExperienceCard(cardIdx, 'down')}
+                              className={`p-1 rounded transition-colors ${
+                                cardIdx === experienceCards.length - 1
+                                  ? 'text-stone-300 cursor-not-allowed'
+                                  : 'text-stone-500 hover:text-stone-900 hover:bg-white cursor-pointer'
+                              }`}
+                              title="Move organization down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                           <span className="font-mono text-xs font-bold text-stone-600 bg-white px-2 py-0.5 rounded border border-stone-200">
                             Card 0{cardIdx + 1}
                           </span>
@@ -1045,7 +1299,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRemoveExperienceCard(card.id)}
-                          className="text-stone-400 hover:text-red-600 p-1 transition-colors rounded hover:bg-red-50"
+                          className="text-stone-400 hover:text-red-600 p-1 transition-colors rounded hover:bg-red-50 cursor-pointer"
                           title="Delete entire work experience"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1076,7 +1330,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="text-xs space-y-1">
+                      <div className="text-xs space-y-2">
                         <label className="font-mono text-stone-500 text-[11px]">Company Logo URL (Optional)</label>
                         <input
                           type="text"
@@ -1090,6 +1344,111 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                           className="w-full px-3 py-1.5 rounded-lg border border-stone-300 bg-white text-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none"
                         />
                         <p className="text-[10px] text-stone-500">A wide-format image (transparent PNG or SVG works best).</p>
+
+                        {card.companyLogoUrl && (
+                          <div className="p-3 bg-stone-50 rounded-lg border border-stone-200 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold text-stone-700 font-mono">
+                                Logo Dark / Light Contrast Mode
+                              </span>
+                              <span className="text-[10px] text-stone-400">Preview & Adjust</span>
+                            </div>
+
+                            {/* Option Buttons */}
+                            <div className="grid grid-cols-3 gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExperienceCards(prev => prev.map(c => 
+                                    c.id === card.id ? { ...c, companyLogoContrast: 'none', companyLogoInvertInDark: false } : c
+                                  ));
+                                }}
+                                className={`px-2 py-1.5 rounded-md text-[11px] font-medium border text-center transition-all ${
+                                  (!card.companyLogoContrast || card.companyLogoContrast === 'none') && !card.companyLogoInvertInDark
+                                    ? 'bg-stone-900 text-white border-stone-900 shadow-2xs'
+                                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-100'
+                                }`}
+                              >
+                                Original Colors
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExperienceCards(prev => prev.map(c => 
+                                    c.id === card.id ? { ...c, companyLogoContrast: 'invert-in-dark', companyLogoInvertInDark: true } : c
+                                  ));
+                                }}
+                                className={`px-2 py-1.5 rounded-md text-[11px] font-medium border text-center transition-all ${
+                                  card.companyLogoContrast === 'invert-in-dark' || card.companyLogoInvertInDark
+                                    ? 'bg-stone-900 text-white border-stone-900 shadow-2xs'
+                                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-100'
+                                }`}
+                              >
+                                Invert in Dark
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExperienceCards(prev => prev.map(c => 
+                                    c.id === card.id ? { ...c, companyLogoContrast: 'invert-in-light', companyLogoInvertInDark: false } : c
+                                  ));
+                                }}
+                                className={`px-2 py-1.5 rounded-md text-[11px] font-medium border text-center transition-all ${
+                                  card.companyLogoContrast === 'invert-in-light'
+                                    ? 'bg-stone-900 text-white border-stone-900 shadow-2xs'
+                                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-100'
+                                }`}
+                              >
+                                Invert in Light
+                              </button>
+                            </div>
+
+                            <p className="text-[10px] text-stone-500">
+                              {(card.companyLogoContrast === 'invert-in-dark' || card.companyLogoInvertInDark) && (
+                                <span className="text-emerald-700 font-medium">✓ Inverts black logos into crisp pure white in dark mode. Light mode keeps original black.</span>
+                              )}
+                              {card.companyLogoContrast === 'invert-in-light' && (
+                                <span className="text-emerald-700 font-medium">✓ Inverts white logos into pure black in light mode. Dark mode keeps original white.</span>
+                              )}
+                              {(!card.companyLogoContrast || card.companyLogoContrast === 'none') && !card.companyLogoInvertInDark && (
+                                <span>Displays unmodified original logo in both light and dark modes (recommended for colored logos like Google).</span>
+                              )}
+                            </p>
+
+                            {/* Side by side live preview */}
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              {/* Light Preview */}
+                              <div className="rounded border border-stone-200 bg-stone-100 p-2.5 flex flex-col items-center justify-center gap-1">
+                                <span className="text-[9px] font-mono uppercase text-stone-500 font-semibold tracking-wider">Light Mode</span>
+                                <div className="h-7 flex items-center justify-center">
+                                  <img
+                                    src={card.companyLogoUrl}
+                                    alt="Light preview"
+                                    className={`h-6 max-w-full object-contain ${
+                                      card.companyLogoContrast === 'invert-in-light' ? 'brightness-0' : ''
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Dark Preview */}
+                              <div className="rounded border border-stone-800 bg-[#232328] p-2.5 flex flex-col items-center justify-center gap-1">
+                                <span className="text-[9px] font-mono uppercase text-stone-400 font-semibold tracking-wider">Dark Mode</span>
+                                <div className="h-7 flex items-center justify-center">
+                                  <img
+                                    src={card.companyLogoUrl}
+                                    alt="Dark preview"
+                                    className={`h-6 max-w-full object-contain ${
+                                      (card.companyLogoContrast === 'invert-in-dark' || card.companyLogoInvertInDark) ? 'brightness-0 invert' : ''
+                                    }`}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Roles & Milestones Sub-Section */}
@@ -1115,14 +1474,46 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                               className="p-3.5 rounded-lg border border-stone-200 bg-white space-y-3 shadow-2xs"
                             >
                               <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-mono font-medium text-stone-500">
-                                  Role #{rIdx + 1}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {card.roles.length > 1 && (
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={rIdx === 0}
+                                        onClick={() => handleMoveRoleInCard(card.id, rIdx, 'up')}
+                                        className={`p-0.5 rounded transition-colors ${
+                                          rIdx === 0
+                                            ? 'text-stone-300 cursor-not-allowed'
+                                            : 'text-stone-500 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                        }`}
+                                        title="Move role up"
+                                      >
+                                        <ArrowUp className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={rIdx === card.roles.length - 1}
+                                        onClick={() => handleMoveRoleInCard(card.id, rIdx, 'down')}
+                                        className={`p-0.5 rounded transition-colors ${
+                                          rIdx === card.roles.length - 1
+                                            ? 'text-stone-300 cursor-not-allowed'
+                                            : 'text-stone-500 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                        }`}
+                                        title="Move role down"
+                                      >
+                                        <ArrowDown className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  )}
+                                  <span className="text-[11px] font-mono font-medium text-stone-500">
+                                    Role #{rIdx + 1}
+                                  </span>
+                                </div>
                                 {card.roles.length > 1 && (
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveRoleFromCard(card.id, role.id)}
-                                    className="text-stone-400 hover:text-red-600 p-1 transition-colors"
+                                    className="text-stone-400 hover:text-red-600 p-1 transition-colors cursor-pointer"
                                     title="Delete this role/milestone"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1210,8 +1601,38 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
                                 <div className="space-y-1.5">
                                   {role.highlights.map((bullet, bIdx) => (
-                                    <div key={bIdx} className="flex items-center gap-2">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-stone-400 shrink-0 ml-1" />
+                                    <div key={bIdx} className="flex items-center gap-1.5">
+                                      {role.highlights.length > 1 && (
+                                        <div className="flex items-center gap-0.5 shrink-0">
+                                          <button
+                                            type="button"
+                                            disabled={bIdx === 0}
+                                            onClick={() => handleMoveBulletInRole(card.id, role.id, bIdx, 'up')}
+                                            className={`p-0.5 rounded transition-colors ${
+                                              bIdx === 0
+                                                ? 'text-stone-200 cursor-not-allowed'
+                                                : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                            }`}
+                                            title="Move bullet up"
+                                          >
+                                            <ArrowUp className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={bIdx === role.highlights.length - 1}
+                                            onClick={() => handleMoveBulletInRole(card.id, role.id, bIdx, 'down')}
+                                            className={`p-0.5 rounded transition-colors ${
+                                              bIdx === role.highlights.length - 1
+                                                ? 'text-stone-200 cursor-not-allowed'
+                                                : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                            }`}
+                                            title="Move bullet down"
+                                          >
+                                            <ArrowDown className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      )}
+                                      <span className="w-1.5 h-1.5 rounded-full bg-stone-400 shrink-0 ml-0.5" />
                                       <input
                                         type="text"
                                         placeholder="Accomplishment or project milestone..."
@@ -1223,7 +1644,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                                         <button
                                           type="button"
                                           onClick={() => handleRemoveBulletFromRole(card.id, role.id, bIdx)}
-                                          className="text-stone-400 hover:text-red-600 p-1 transition-colors"
+                                          className="text-stone-400 hover:text-red-600 p-1 transition-colors cursor-pointer"
                                           title="Remove bullet point"
                                         >
                                           <X className="w-3.5 h-3.5" />
@@ -1268,13 +1689,50 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     className="p-4 rounded-xl border border-stone-200 bg-stone-50/60 space-y-3"
                   >
                     <div className="flex items-center justify-between pb-2 border-b border-stone-200">
-                      <span className="font-mono text-xs font-bold text-stone-500">
-                        Project #{idx + 1}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {editedProjects.length > 1 && (
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoveProject(idx, 'up')}
+                              className={`p-1 rounded transition-colors ${
+                                idx === 0
+                                  ? 'text-stone-300 cursor-not-allowed'
+                                  : 'text-stone-500 hover:text-stone-900 hover:bg-white cursor-pointer'
+                              }`}
+                              title="Move project up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === editedProjects.length - 1}
+                              onClick={() => handleMoveProject(idx, 'down')}
+                              className={`p-1 rounded transition-colors ${
+                                idx === editedProjects.length - 1
+                                  ? 'text-stone-300 cursor-not-allowed'
+                                  : 'text-stone-500 hover:text-stone-900 hover:bg-white cursor-pointer'
+                              }`}
+                              title="Move project down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                        <span className="font-mono text-xs font-bold text-stone-600">
+                          Project #{idx + 1}
+                        </span>
+                        {project.title && (
+                          <span className="text-xs font-semibold text-stone-800 truncate max-w-[200px]">
+                            {project.title}
+                          </span>
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleRemoveProject(project.id)}
-                        className="text-stone-400 hover:text-red-600 p-1 transition-colors"
+                        className="text-stone-400 hover:text-red-600 p-1 transition-colors cursor-pointer rounded hover:bg-red-50"
                         title="Delete project"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1357,40 +1815,195 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                       />
                     </div>
 
-                    {/* Optional URLs: Source / CAD Repo and Product Specification */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-                      <div className="space-y-1">
-                        <label className="font-mono text-stone-500 text-[11px]">
-                          Source / CAD Repo URL (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. https://github.com/saahiressa/project"
-                          value={project.githubUrl || ''}
-                          onChange={(e) => {
-                            const copy = [...editedProjects];
-                            copy[idx] = { ...copy[idx], githubUrl: e.target.value };
-                            setEditedProjects(copy);
-                          }}
-                          className="w-full px-3 py-1.5 rounded border border-stone-300 bg-white"
-                        />
+                    {/* Project Links & Websites (Configurable Names) */}
+                    <div className="pt-2.5 border-t border-stone-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="font-mono text-stone-800 text-xs font-semibold">
+                            Project Links & Websites (Custom Names)
+                          </label>
+                          <p className="text-[11px] text-stone-500 mt-0.5">
+                            Configure custom link names such as company websites, client portals, CAD viewers, or repositories.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddLinkToProject(idx, 'Company Website', '')}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md bg-white border border-stone-300 text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Link</span>
+                        </button>
                       </div>
-                      <div className="space-y-1">
-                        <label className="font-mono text-stone-500 text-[11px]">
-                          Product Specification URL (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. https://specs.example.com/doc"
-                          value={project.liveUrl || ''}
-                          onChange={(e) => {
-                            const copy = [...editedProjects];
-                            copy[idx] = { ...copy[idx], liveUrl: e.target.value };
-                            setEditedProjects(copy);
-                          }}
-                          className="w-full px-3 py-1.5 rounded border border-stone-300 bg-white"
-                        />
+
+                      {(!project.links || project.links.length === 0) ? (
+                        <div className="p-2.5 text-center rounded-lg border border-dashed border-stone-300 bg-white text-[11px] text-stone-500">
+                          No links added yet. Click &ldquo;Add Link&rdquo; to configure a link with a custom display name.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {project.links.map((link, lIdx) => (
+                            <div
+                              key={lIdx}
+                              className="p-2.5 rounded-lg bg-white border border-stone-200 shadow-2xs space-y-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  {project.links && project.links.length > 1 && (
+                                    <div className="flex items-center gap-0.5 shrink-0">
+                                      <button
+                                        type="button"
+                                        disabled={lIdx === 0}
+                                        onClick={() => handleMoveLinkInProject(idx, lIdx, 'up')}
+                                        className={`p-0.5 rounded transition-colors ${
+                                          lIdx === 0
+                                            ? 'text-stone-200 cursor-not-allowed'
+                                            : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                        }`}
+                                        title="Move link up"
+                                      >
+                                        <ArrowUp className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={lIdx === (project.links?.length || 0) - 1}
+                                        onClick={() => handleMoveLinkInProject(idx, lIdx, 'down')}
+                                        className={`p-0.5 rounded transition-colors ${
+                                          lIdx === (project.links?.length || 0) - 1
+                                            ? 'text-stone-200 cursor-not-allowed'
+                                            : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                        }`}
+                                        title="Move link down"
+                                      >
+                                        <ArrowDown className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  )}
+                                  <span className="text-[11px] font-mono font-medium text-stone-500">
+                                    Link #{lIdx + 1}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLinkFromProject(idx, lIdx)}
+                                  className="p-1 text-stone-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                  title="Remove link"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                <div className="sm:col-span-5 space-y-1">
+                                  <label className="font-mono text-stone-500 text-[10px] uppercase">
+                                    Link Display Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Dream Harvest Farms, Company Website..."
+                                    value={link.label}
+                                    onChange={(e) => handleUpdateLinkInProject(idx, lIdx, 'label', e.target.value)}
+                                    className="w-full px-2.5 py-1 text-xs rounded border border-stone-200 bg-stone-50/50 text-stone-900 focus:bg-white focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                                  />
+                                </div>
+                                <div className="sm:col-span-7 space-y-1">
+                                  <label className="font-mono text-stone-500 text-[10px] uppercase">
+                                    URL / Web Address
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. https://company.com or https://github.com/..."
+                                    value={link.url}
+                                    onChange={(e) => handleUpdateLinkInProject(idx, lIdx, 'url', e.target.value)}
+                                    className="w-full px-2.5 py-1 text-xs rounded border border-stone-200 bg-stone-50/50 text-stone-900 focus:bg-white focus:ring-1 focus:ring-stone-900 focus:outline-none font-mono text-[11px]"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Key Engineering Highlights / Bullet Points */}
+                    <div className="pt-2.5 border-t border-stone-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="font-mono text-stone-800 text-xs font-semibold">
+                            Key Engineering Highlights (Bullet Points)
+                          </label>
+                          <p className="text-[11px] text-stone-500 mt-0.5">
+                            Bullet points describing engineering achievements, mechanisms, or key solutions.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleAddChallengeToProject(idx)}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md bg-white border border-stone-300 text-stone-700 hover:bg-stone-100 hover:text-stone-900 transition-colors shadow-2xs cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Bullet</span>
+                        </button>
                       </div>
+
+                      {(!project.challengesSolved || project.challengesSolved.length === 0) ? (
+                        <div className="p-2.5 text-center rounded-lg border border-dashed border-stone-300 bg-white text-[11px] text-stone-500">
+                          No bullet points added yet. Click &ldquo;Add Bullet&rdquo; to highlight key features or engineering solutions.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {project.challengesSolved.map((bullet, bIdx) => (
+                            <div key={bIdx} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-white border border-stone-200 shadow-2xs">
+                              {project.challengesSolved.length > 1 && (
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={bIdx === 0}
+                                    onClick={() => handleMoveChallengeInProject(idx, bIdx, 'up')}
+                                    className={`p-0.5 rounded transition-colors ${
+                                      bIdx === 0
+                                        ? 'text-stone-200 cursor-not-allowed'
+                                        : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                    }`}
+                                    title="Move bullet up"
+                                  >
+                                    <ArrowUp className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={bIdx === project.challengesSolved.length - 1}
+                                    onClick={() => handleMoveChallengeInProject(idx, bIdx, 'down')}
+                                    className={`p-0.5 rounded transition-colors ${
+                                      bIdx === project.challengesSolved.length - 1
+                                        ? 'text-stone-200 cursor-not-allowed'
+                                        : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                    }`}
+                                    title="Move bullet down"
+                                  >
+                                    <ArrowDown className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0 ml-1" />
+                              <input
+                                type="text"
+                                placeholder="Key engineering highlight or challenge solved..."
+                                value={bullet}
+                                onChange={(e) => handleUpdateChallengeInProject(idx, bIdx, e.target.value)}
+                                className="flex-1 px-2.5 py-1 text-xs rounded border border-stone-200 bg-stone-50/50 text-stone-900 focus:bg-white focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveChallengeFromProject(idx, bIdx)}
+                                className="p-1 text-stone-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                title="Remove bullet point"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* Key Performance Specifications Section */}
@@ -1399,9 +2012,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         <div>
                           <label className="font-mono text-stone-800 text-xs font-semibold flex items-center gap-1.5">
                             <span>Key Performance Specifications</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-200 text-stone-700 font-mono">
-                              {project.metrics?.length || 0}
-                            </span>
                           </label>
                           <p className="text-[11px] text-stone-500 mt-0.5">
                             Add as many performance metrics, mechanical tolerances, or ratings as needed.
@@ -1583,7 +2193,39 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   <div key={catIdx} className="p-4 sm:p-5 rounded-xl border border-stone-200 bg-stone-50 space-y-4">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex-1 space-y-1">
-                        <label className="text-xs font-mono text-stone-500">Category Name</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-mono text-stone-500">Category Name</label>
+                          {editedSkills.length > 1 && (
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                type="button"
+                                disabled={catIdx === 0}
+                                onClick={() => handleMoveSkillCategory(catIdx, 'up')}
+                                className={`p-1 rounded transition-colors ${
+                                  catIdx === 0
+                                    ? 'text-stone-300 cursor-not-allowed'
+                                    : 'text-stone-500 hover:text-stone-900 hover:bg-white cursor-pointer'
+                                }`}
+                                title="Move category up"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={catIdx === editedSkills.length - 1}
+                                onClick={() => handleMoveSkillCategory(catIdx, 'down')}
+                                className={`p-1 rounded transition-colors ${
+                                  catIdx === editedSkills.length - 1
+                                    ? 'text-stone-300 cursor-not-allowed'
+                                    : 'text-stone-500 hover:text-stone-900 hover:bg-white cursor-pointer'
+                                }`}
+                                title="Move category down"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         <input
                           type="text"
                           value={category.name}
@@ -1602,7 +2244,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                           newSkills.splice(catIdx, 1);
                           setEditedSkills(newSkills);
                         }}
-                        className="p-1.5 mt-5 rounded-md text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
+                        className="p-1.5 mt-5 rounded-md text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer"
                         title="Remove category"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1613,7 +2255,37 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                       <label className="text-xs font-mono text-stone-500">Skills in Category</label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {category.skills.map((skill, skillIdx) => (
-                          <div key={skillIdx} className="flex items-center gap-2">
+                          <div key={skillIdx} className="flex items-center gap-1.5 p-1 rounded-lg bg-white border border-stone-200 shadow-2xs">
+                            {category.skills.length > 1 && (
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={skillIdx === 0}
+                                  onClick={() => handleMoveSkill(catIdx, skillIdx, 'up')}
+                                  className={`p-0.5 rounded transition-colors ${
+                                    skillIdx === 0
+                                      ? 'text-stone-200 cursor-not-allowed'
+                                      : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                  }`}
+                                  title="Move skill up"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={skillIdx === category.skills.length - 1}
+                                  onClick={() => handleMoveSkill(catIdx, skillIdx, 'down')}
+                                  className={`p-0.5 rounded transition-colors ${
+                                    skillIdx === category.skills.length - 1
+                                      ? 'text-stone-200 cursor-not-allowed'
+                                      : 'text-stone-400 hover:text-stone-900 hover:bg-stone-100 cursor-pointer'
+                                  }`}
+                                  title="Move skill down"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
                             <input
                               type="text"
                               value={skill.name}
@@ -1622,7 +2294,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                                 newSkills[catIdx].skills[skillIdx].name = e.target.value;
                                 setEditedSkills(newSkills);
                               }}
-                              className="flex-1 px-3 py-1.5 text-sm rounded border border-stone-200 bg-white"
+                              className="flex-1 px-2.5 py-1 text-xs sm:text-sm rounded border-0 bg-transparent text-stone-900 focus:outline-none focus:ring-1 focus:ring-stone-900"
                               placeholder="Skill name"
                             />
                             <button
@@ -1632,10 +2304,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                                 newSkills[catIdx].skills[skillIdx].highlighted = !newSkills[catIdx].skills[skillIdx].highlighted;
                                 setEditedSkills(newSkills);
                               }}
-                              className={`p-1.5 rounded transition-colors ${skill.highlighted ? 'text-amber-500 bg-amber-50' : 'text-stone-400 hover:bg-stone-100'}`}
+                              className={`p-1 rounded transition-colors cursor-pointer ${skill.highlighted ? 'text-amber-500 bg-amber-50' : 'text-stone-400 hover:bg-stone-100'}`}
                               title="Toggle highlight (displays darker)"
                             >
-                              <Sparkles className="w-4 h-4" />
+                              <Sparkles className="w-3.5 h-3.5" />
                             </button>
                             <button
                               type="button"
@@ -1644,9 +2316,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                                 newSkills[catIdx].skills.splice(skillIdx, 1);
                                 setEditedSkills(newSkills);
                               }}
-                              className="p-1.5 text-stone-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors"
+                              className="p-1 text-stone-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                              title="Remove skill"
                             >
-                              <X className="w-4 h-4" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         ))}

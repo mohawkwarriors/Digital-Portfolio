@@ -8,11 +8,14 @@ import {
   Github,
   TrendingUp,
   Maximize2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Globe,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Project } from '../types';
 import { LazyImage } from './LazyImage';
+import { getProjectLinks } from '../utils/projectLinks';
 
 interface ProjectCardProps {
   project: Project;
@@ -46,19 +49,36 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
 
   const activeImage = allImages[selectedGalleryIndex] || allImages[0];
 
+  const handleAnchorOnCollapse = () => {
+    const cardEl = document.getElementById(`project-card-${project.id}`);
+    const projectsSection = document.getElementById('projects');
+    if (!cardEl) return;
+    
+    const cardRect = cardEl.getBoundingClientRect();
+    if (cardRect.top < 80) {
+      const targetY = Math.max(0, window.scrollY + cardRect.top - 80);
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
+      return;
+    }
+
+    if (projectsSection) {
+      const sectionRect = projectsSection.getBoundingClientRect();
+      const cardHeight = cardEl.offsetHeight;
+      const collapsedEstimate = 320;
+      const deltaH = Math.max(0, cardHeight - collapsedEstimate);
+      const futureBottom = sectionRect.bottom - deltaH;
+      if (futureBottom < window.innerHeight) {
+        const overshoot = window.innerHeight - futureBottom;
+        const targetY = Math.max(0, window.scrollY - overshoot);
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      }
+    }
+  };
+
   const handleToggleCard = (e?: React.MouseEvent | React.KeyboardEvent) => {
     if (e) e.stopPropagation();
     if (isExpanded) {
-      // If collapsing while scrolled down inside the card, anchor viewport to the card top
-      // so the page doesn't jump down into Skills
-      const cardEl = document.getElementById(`project-card-${project.id}`);
-      if (cardEl) {
-        const rect = cardEl.getBoundingClientRect();
-        if (rect.top < 80) {
-          const targetY = Math.max(0, window.scrollY + rect.top - 80);
-          window.scrollTo({ top: targetY, behavior: 'smooth' });
-        }
-      }
+      handleAnchorOnCollapse();
     }
     onToggle();
   };
@@ -74,15 +94,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   const handleMouseLeave = () => {
     if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
     if (isExpanded) {
-      const cardEl = document.getElementById(`project-card-${project.id}`);
-      if (cardEl) {
-        const rect = cardEl.getBoundingClientRect();
-        // If the user has scrolled down into the card, do NOT auto-collapse on mouse leave!
-        // This prevents the page from collapsing mid-scroll and dumping into Skills.
-        if (rect.top < 60) {
-          return;
-        }
-      }
+      handleAnchorOnCollapse();
       onToggle();
     }
   };
@@ -189,17 +201,29 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 </p>
               </div>
 
+              {/* Key Highlights / Engineering Highlights */}
+              {project.challengesSolved && project.challengesSolved.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+                    <span>Key Engineering Highlights</span>
+                  </h4>
+                  <ul className="space-y-2">
+                    {project.challengesSolved.map((bullet, bIdx) => (
+                      <li key={bIdx} className="flex items-start gap-2.5 text-xs sm:text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 shrink-0" />
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Key Performance Specifications */}
               {project.metrics && project.metrics.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <TrendingUp className="w-3.5 h-3.5 text-stone-600" />
-                      <span>Key Performance Specifications</span>
-                    </span>
-                    <span className="text-[10px] text-stone-400 font-mono">
-                      {project.metrics.length} {project.metrics.length === 1 ? 'spec' : 'specs'}
-                    </span>
+                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-stone-600" />
+                    <span>Key Performance Specifications</span>
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                     {project.metrics.map((m, idx) => (
@@ -219,36 +243,46 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 </div>
               )}
 
-              {/* Links (Source / CAD Repo & Product Specification) - Optional */}
-              {((project.githubUrl && project.githubUrl.trim().length > 0) || (project.liveUrl && project.liveUrl.trim().length > 0)) && (
-                <div className="pt-2 border-t border-stone-200">
-                  <div className="flex flex-wrap items-center gap-3 pt-2">
-                    {project.githubUrl && project.githubUrl.trim().length > 0 && (
-                      <a
-                        href={project.githubUrl.trim()}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-stone-600 hover:text-stone-900 font-medium transition-colors"
-                      >
-                        <Github className="w-3.5 h-3.5" />
-                        <span>Source / CAD Repo</span>
-                        <ExternalLink className="w-3 h-3 text-stone-400" />
-                      </a>
-                    )}
-                    {project.liveUrl && project.liveUrl.trim().length > 0 && (
-                      <a
-                        href={project.liveUrl.trim()}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
-                      >
-                        <span>Product Specification</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
+              {/* Configured Project Links */}
+              {(() => {
+                const links = getProjectLinks(project);
+                if (links.length === 0) return null;
+
+                return (
+                  <div className="pt-2 border-t border-stone-200">
+                    <div className="flex flex-wrap items-center gap-2 pt-2">
+                      {links.map((link, lIdx) => {
+                        const lowerLabel = link.label.toLowerCase();
+                        const lowerUrl = link.url.toLowerCase();
+                        const isGithub = lowerLabel.includes('github') || lowerUrl.includes('github.com');
+                        const isDoc = lowerLabel.includes('spec') || lowerLabel.includes('doc') || lowerLabel.includes('paper') || lowerLabel.includes('report');
+                        const isWebsite = lowerLabel.includes('website') || lowerLabel.includes('company') || lowerLabel.includes('home') || lowerLabel.includes('site');
+
+                        return (
+                          <a
+                            key={lIdx}
+                            href={link.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 text-xs font-medium border border-stone-200/80 transition-colors shadow-2xs group/link"
+                          >
+                            {isGithub ? (
+                              <Github className="w-3.5 h-3.5 text-stone-700" />
+                            ) : isDoc ? (
+                              <FileText className="w-3.5 h-3.5 text-stone-600" />
+                            ) : (
+                              <Globe className="w-3.5 h-3.5 text-stone-600" />
+                            )}
+                            <span>{link.label}</span>
+                            <ExternalLink className="w-3 h-3 text-stone-400 group-hover/link:text-stone-700 transition-colors" />
+                          </a>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Bottom Collapse Button */}
               <div className="pt-2 text-center">

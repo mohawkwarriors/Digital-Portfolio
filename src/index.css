@@ -2,6 +2,23 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Synchronized fluid theme morphing on key surfaces only (zero main-thread thrashing) */
+html.theme-transition,
+html.theme-transition body,
+html.theme-transition nav,
+html.theme-transition main,
+html.theme-transition header,
+html.theme-transition footer,
+html.theme-transition section,
+html.theme-transition article,
+html.theme-transition div[class*="bg-"],
+html.theme-transition div[class*="border-"] {
+  transition: background-color 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              color 0.25s ease !important;
+  transition-delay: 0s !important;
+}
+
 @layer base {
   html {
     background-color: #ffffff;
@@ -18,7 +35,6 @@
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: #ffffff;
     color: #1c1917;
-    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   .dark body {

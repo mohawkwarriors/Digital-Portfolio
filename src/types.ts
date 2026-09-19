@@ -3,6 +3,8 @@ export interface ExperienceFlowNode {
   role: string;
   company: string;
   companyLogoUrl?: string; // Optional wide format logo for the company
+  companyLogoInvertInDark?: boolean; // Invert logo in dark mode (e.g. for dark/black monochrome logos)
+  companyLogoContrast?: 'none' | 'invert-in-dark' | 'invert-in-light'; // Contrast filter mode for company logo
   location: string;
   period: string;
   startYear: number;
@@ -22,6 +24,11 @@ export interface ProjectMetric {
   value: string;
 }
 
+export interface ProjectLink {
+  label: string;
+  url: string;
+}
+
 export type ProjectCategory = 'All' | 'Consumer Hardware' | 'Mechanisms & Kinematics' | 'DFM & Tooling' | 'Wearables & IoT';
 
 export interface Project {
@@ -35,7 +42,10 @@ export interface Project {
   metrics: ProjectMetric[];
   techStack: string[];
   liveUrl?: string;
+  liveUrlLabel?: string;
   githubUrl?: string;
+  githubUrlLabel?: string;
+  links?: ProjectLink[];
   featured: boolean;
   imageUrl?: string;
   images?: string[];
