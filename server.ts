@@ -156,43 +156,6 @@ async function startServer() {
     }
   }
 
-  // Load valid passkeys (from env and secure stored config)
-  function getAcceptablePasskeys(): string[] {
-    const list: string[] = [];
-    if (process.env.ADMIN_PASSKEY) {
-      list.push(process.env.ADMIN_PASSKEY);
-    }
-    // Default system passkey
-    list.push('Saahir2026');
-
-    try {
-      if (fs.existsSync(authConfigFile)) {
-        const stored = JSON.parse(fs.readFileSync(authConfigFile, 'utf8'));
-        if (stored && typeof stored.passkey === 'string' && stored.passkey.trim()) {
-          list.unshift(stored.passkey.trim());
-        }
-      }
-    } catch (_) {}
-
-    return Array.from(new Set(list.filter(Boolean)));
-  }
-
-  // Timing-safe password verification using SHA-256 fixed-length buffers
-  function timingSafePasskeyCheck(input: string, candidate: string): boolean {
-    if (!input || !candidate) return false;
-    const hashA = crypto.createHash('sha256').update(input).digest();
-    const hashB = crypto.createHash('sha256').update(candidate).digest();
-    return crypto.timingSafeEqual(hashA, hashB);
-  }
-
-  // Rate Limiting and Anti-Brute-Force defense
-  interface RateLimitRecord {
-    attempts: number;
-    lockedUntil: number;
-    lastAttempt: number;
-  }
-  const rateLimits = new Map<string, RateLimitRecord>();
-
   function getClientIp(req: express.Request): string {
     const forwarded = req.headers['x-forwarded-for'];
     if (typeof forwarded === 'string') {
@@ -212,6 +175,34 @@ async function startServer() {
       return res.status(401).json({
         error: 'Unauthorized: Valid owner session token required. Please log in.'
       });
+    }
+
+    // Check if token is a Firebase ID token (JWT)
+    if (token.includes('.')) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+          if (
+            payload &&
+            payload.email &&
+            payload.email.toLowerCase() === validEmail &&
+            payload.email_verified &&
+            payload.exp * 1000 > Date.now()
+          ) {
+            (req as any).session = {
+              token,
+              email: validEmail,
+              createdAt: (payload.auth_time || 0) * 1000,
+              expiresAt: payload.exp * 1000,
+              ip: getClientIp(req)
+            };
+            return next();
+          }
+        }
+      } catch (jwtErr) {
+        // Fall through to standard session lookup
+      }
     }
 
     const session = activeSessions.get(token);
@@ -322,96 +313,11 @@ async function startServer() {
     }
   });
 
-  // Secure Authentication Endpoint with Rate Limiting & Cryptographic Tokens
-  app.post('/api/auth', async (req, res) => {
-    const ip = getClientIp(req);
-    const now = Date.now();
-
-    // Check rate limit status
-    let rateRecord = rateLimits.get(ip);
-    if (rateRecord) {
-      if (rateRecord.lockedUntil > now) {
-        const minutesLeft = Math.ceil((rateRecord.lockedUntil - now) / 60000);
-        return res.status(429).json({
-          success: false,
-          locked: true,
-          retryAfterMinutes: minutesLeft,
-          message: `Too many failed login attempts. Temporarily locked for ${minutesLeft} more minute(s) to protect portfolio integrity.`
-        });
-      }
-      // Reset if previous attempts were long ago
-      if (now - rateRecord.lastAttempt > 30 * 60 * 1000) {
-        rateLimits.delete(ip);
-        rateRecord = undefined;
-      }
-    }
-
-    const { email, passkey, rememberMe } = req.body;
-    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-    const cleanPasskey = typeof passkey === 'string' ? passkey.trim() : '';
-
-    const acceptablePasskeys = getAcceptablePasskeys();
-    const isEmailValid = cleanEmail === validEmail;
-    const isPasskeyValid = isEmailValid && acceptablePasskeys.some((cand) => timingSafePasskeyCheck(cleanPasskey, cand));
-
-    if (!isPasskeyValid) {
-      // Artificial delay (350ms) to thwart automated timing/brute-force attacks
-      await new Promise((resolve) => setTimeout(resolve, 350));
-
-      if (!rateRecord) {
-        rateRecord = { attempts: 1, lockedUntil: 0, lastAttempt: now };
-      } else {
-        rateRecord.attempts += 1;
-        rateRecord.lastAttempt = now;
-      }
-
-      const MAX_ATTEMPTS = 5;
-      if (rateRecord.attempts >= MAX_ATTEMPTS) {
-        rateRecord.lockedUntil = now + 15 * 60 * 1000; // 15 min lockout
-        rateLimits.set(ip, rateRecord);
-        return res.status(429).json({
-          success: false,
-          locked: true,
-          retryAfterMinutes: 15,
-          message: 'Too many failed attempts. Login temporarily locked for 15 minutes.'
-        });
-      }
-
-      rateLimits.set(ip, rateRecord);
-      const remaining = MAX_ATTEMPTS - rateRecord.attempts;
-      return res.status(401).json({
-        success: false,
-        message: `Incorrect passkey. ${remaining} attempt(s) remaining before a 15-minute security lockout.`,
-        remainingAttempts: remaining
-      });
-    }
-
-    // Success: Clear failed attempts
-    rateLimits.delete(ip);
-
-    // Issue cryptographic 256-bit session token
-    const token = crypto.randomBytes(32).toString('hex');
-    // Session lifetime: 30 days if rememberMe, otherwise 24 hours
-    const duration = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-    const expiresAt = now + duration;
-
-    const sessionData: SessionInfo = {
-      token,
-      email: validEmail,
-      createdAt: now,
-      expiresAt,
-      ip
-    };
-
-    activeSessions.set(token, sessionData);
-    saveSessionsToFile();
-
-    return res.json({
-      success: true,
-      token,
-      email: validEmail,
-      expiresAt,
-      message: 'Authenticated successfully'
+  // Authentication: Passkeys are disabled in favor of exclusive Google Sign-In
+  app.post('/api/auth', (req, res) => {
+    return res.status(403).json({
+      success: false,
+      message: 'Passkey authentication has been disabled. Only Google Sign-In is allowed.'
     });
   });
 
@@ -456,44 +362,30 @@ async function startServer() {
     return res.json({ success: true, message: 'Logged out successfully' });
   });
 
-  // Dynamic passkey update endpoint (Protected by requireAuth + old passkey verification)
-  app.post('/api/update-passkey', requireAuth, (req, res) => {
-    const { currentPasskey, newPasskey } = req.body;
-    if (typeof newPasskey !== 'string' || newPasskey.trim().length < 6) {
-      return res.status(400).json({ error: 'New passkey must be at least 6 characters long' });
-    }
-
-    // Must verify current passkey
-    const acceptable = getAcceptablePasskeys();
-    const isCurrentValid = typeof currentPasskey === 'string' && acceptable.some((cand) => timingSafePasskeyCheck(currentPasskey.trim(), cand));
-    if (!isCurrentValid) {
-      return res.status(401).json({ error: 'Current passkey is incorrect. Verification failed.' });
-    }
-
-    const cleanNewPasskey = newPasskey.trim();
-    process.env.ADMIN_PASSKEY = cleanNewPasskey;
-
-    try {
-      fs.writeFileSync(
-        authConfigFile,
-        JSON.stringify(
-          {
-            passkey: cleanNewPasskey,
-            updatedAt: new Date().toISOString()
-          },
-          null,
-          2
-        ),
-        'utf8'
-      );
-    } catch (e) {
-      console.error('Failed to write .admin_auth.json:', e);
-    }
-
-    return res.json({ success: true, message: 'Passkey updated successfully' });
+  // Passkey update endpoint is disabled
+  app.post('/api/update-passkey', (req, res) => {
+    return res.status(403).json({
+      error: 'Passkey management is disabled. Authentication is handled exclusively via Google Sign-In.'
+    });
   });
 
-  // Sync edits made via UI directly into source file src/data/initialData.ts (Protected by requireAuth)
+  const portfolioJsonFile = path.join(process.cwd(), 'src', 'data', 'portfolio_data.json');
+
+  // Public endpoint: Fetch current portfolio data for any visiting computer or device
+  app.get('/api/portfolio-data', (req, res) => {
+    try {
+      if (fs.existsSync(portfolioJsonFile)) {
+        const data = JSON.parse(fs.readFileSync(portfolioJsonFile, 'utf8'));
+        return res.json({ success: true, data });
+      }
+      return res.json({ success: false, data: null });
+    } catch (err) {
+      console.warn('Error reading portfolio_data.json:', err);
+      return res.json({ success: false, data: null });
+    }
+  });
+
+  // Sync edits made via UI directly into source file src/data/initialData.ts and portfolio_data.json (Protected by requireAuth)
   app.post('/api/sync-data', requireAuth, async (req, res) => {
     try {
       const { profile, experienceNodes, projects, skills, sections } = req.body;
@@ -501,6 +393,29 @@ async function startServer() {
         return res.status(400).json({ error: 'Invalid profile data' });
       }
 
+      // 1. Write structured JSON backup
+      try {
+        fs.writeFileSync(
+          portfolioJsonFile,
+          JSON.stringify(
+            {
+              profile,
+              experienceNodes,
+              projects,
+              skills,
+              sections,
+              updatedAt: new Date().toISOString()
+            },
+            null,
+            2
+          ),
+          'utf8'
+        );
+      } catch (jsonErr) {
+        console.warn('Could not write portfolio_data.json:', jsonErr);
+      }
+
+      // 2. Write to source code src/data/initialData.ts
       const filePath = path.join(process.cwd(), 'src', 'data', 'initialData.ts');
       const content = `import { Profile, ExperienceFlowNode, Project, SkillCategory, SectionConfig } from '../types';
 
@@ -516,7 +431,7 @@ export const initialSections: SectionConfig[] = ${JSON.stringify(sections, null,
 `;
 
       fs.writeFileSync(filePath, content, 'utf8');
-      res.json({ success: true, message: 'Updated src/data/initialData.ts successfully' });
+      res.json({ success: true, message: 'Updated src/data/initialData.ts and portfolio_data.json successfully' });
     } catch (err) {
       console.error('Failed to write initialData.ts:', err);
       res.status(500).json({ error: 'Failed to write initialData.ts' });

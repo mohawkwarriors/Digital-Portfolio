@@ -8,8 +8,23 @@ import { ProjectsSection } from './components/ProjectsSection';
 import { SkillsSection } from './components/SkillsSection';
 import { Footer } from './components/Footer';
 import { EditProfileModal } from './components/EditProfileModal';
-import { AuthModal, AUTHORIZED_OWNER_EMAIL } from './components/AuthModal';
+import { AuthModal } from './components/AuthModal';
 import { ResumeModal } from './components/ResumeModal';
+import { 
+  subscribeToPortfolio, 
+  savePortfolioToFirestore, 
+  auth, 
+  logoutFirebase, 
+  AUTHORIZED_OWNER_EMAIL, 
+  PortfolioData 
+} from './utils/firebase';
+import { 
+  getAuthHeaders, 
+  isLocalSessionValid, 
+  clearLocalSession, 
+  subscribeAuth 
+} from './utils/authClient';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const STORAGE_KEY = 'digital_portfolio_pde_v2';
 
@@ -22,7 +37,6 @@ export default function App() {
         if (parsed.profile && !parsed.profile.title?.includes('Distributed')) {
           let mergedStats = parsed.profile.stats;
           if (mergedStats && !Array.isArray(mergedStats)) {
-            // migrate old stats object to array
             mergedStats = [
               { label: 'Years Experience', value: `${mergedStats.yearsExperience || 0}+` },
               { label: 'Mass Production', value: mergedStats.systemsScaled || '' },
@@ -30,7 +44,6 @@ export default function App() {
               { label: 'Tooling Builds', value: mergedStats.openSourceStars || '' }
             ];
           }
-          // Merge with initialProfile to pick up any new properties like avatarUrl and resumeUrl
           const mergedProfile = { 
             ...initialProfile, 
             ...parsed.profile, 
@@ -112,16 +125,95 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
 
-  // Authorization check: only authorized user (saahiressa@gmail.com) can edit
+  // Strict Authorization check: only authorized owner (saahiressa@gmail.com) can edit
+  // Starts as FALSE by default on any fresh device until verified
   const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
     const saved = localStorage.getItem('portfolio_owner_authorized');
-    if (saved !== null) {
-      return saved === 'true';
-    }
-    // Default to authorized in this active environment for the creator
-    localStorage.setItem('portfolio_owner_authorized', 'true');
-    return true;
+    return saved === 'true' && isLocalSessionValid();
   });
+
+  // Helper to apply incoming cloud/server data safely to state
+  const applyRemoteData = (data: PortfolioData) => {
+    if (data.profile) {
+      setProfile((prev) => {
+        let mergedStats = data.profile.stats;
+        if (mergedStats && !Array.isArray(mergedStats)) {
+          mergedStats = [
+            { label: 'Years Experience', value: `${(mergedStats as any).yearsExperience || 0}+` },
+            { label: 'Mass Production', value: (mergedStats as any).systemsScaled || '' },
+            { label: 'NPI Programs', value: `${(mergedStats as any).projectsShipped || 0}` },
+            { label: 'Tooling Builds', value: (mergedStats as any).openSourceStars || '' }
+          ];
+        }
+        return {
+          ...initialProfile,
+          ...data.profile,
+          stats: mergedStats || prev.stats || initialProfile.stats,
+          avatarUrl: data.profile.avatarUrl || prev.avatarUrl || initialProfile.avatarUrl,
+          resumeUrl: (data.profile.resumeUrl && data.profile.resumeUrl.trim() !== '') ? data.profile.resumeUrl : (prev.resumeUrl || '/resume.pdf')
+        };
+      });
+    }
+    if (data.experienceNodes && Array.isArray(data.experienceNodes)) {
+      setExperienceNodes(data.experienceNodes);
+    }
+    if (data.projects && Array.isArray(data.projects)) {
+      setProjects(data.projects);
+    }
+    if (data.skills && Array.isArray(data.skills)) {
+      setSkills(data.skills);
+    }
+    if (data.sections && Array.isArray(data.sections)) {
+      setSections(data.sections);
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (_) {}
+  };
+
+  // Real-time Cloud Synchronization across all devices
+  useEffect(() => {
+    // 1. Subscribe to Cloud Firestore real-time updates
+    const unsubscribeFirestore = subscribeToPortfolio(
+      (cloudData) => {
+        if (cloudData) {
+          applyRemoteData(cloudData);
+        }
+      },
+      (err) => {
+        console.warn('Firestore real-time subscription note:', err);
+      }
+    );
+
+    // 2. Query fallback server API /api/portfolio-data
+    fetch('/api/portfolio-data')
+      .then((r) => r.json())
+      .then((res) => {
+        if (res && res.success && res.data) {
+          applyRemoteData(res.data);
+        }
+      })
+      .catch(() => {});
+
+    // 3. Listen to Firebase Authentication state (Google login)
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user && user.email?.toLowerCase() === AUTHORIZED_OWNER_EMAIL.toLowerCase()) {
+        setIsAuthorized(true);
+        localStorage.setItem('portfolio_owner_authorized', 'true');
+      }
+    });
+
+    // 4. Listen to client auth session state
+    const unsubscribeClientAuth = subscribeAuth((isAuth) => {
+      setIsAuthorized(isAuth);
+    });
+
+    return () => {
+      unsubscribeFirestore();
+      unsubscribeAuth();
+      unsubscribeClientAuth();
+    };
+  }, []);
 
   const handleOpenEdit = () => {
     if (isAuthorized) {
@@ -131,9 +223,10 @@ export default function App() {
     }
   };
 
-  const handleLock = () => {
+  const handleLock = async () => {
     setIsAuthorized(false);
-    localStorage.setItem('portfolio_owner_authorized', 'false');
+    clearLocalSession();
+    await logoutFirebase();
     setIsEditModalOpen(false);
   };
 
@@ -143,7 +236,7 @@ export default function App() {
     setIsEditModalOpen(true);
   };
 
-  // Sync to localStorage and write to source file src/data/initialData.ts
+  // Sync to Cloud Firestore, localStorage, and server source file
   const handleSaveData = async (data: {
     profile: Profile;
     experienceNodes: ExperienceFlowNode[];
@@ -152,9 +245,10 @@ export default function App() {
     sections: SectionConfig[];
   }) => {
     if (!isAuthorized) {
-      alert(`Access denied. Only the authorized owner (${AUTHORIZED_OWNER_EMAIL}) is permitted to save changes.`);
+      alert('Access denied. Administrator privileges are required to save changes.');
       return;
     }
+
     setProfile(data.profile);
     setExperienceNodes(data.experienceNodes);
     setProjects(data.projects);
@@ -162,47 +256,31 @@ export default function App() {
     setSections(data.sections);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
-    // Automatically sync directly into source file src/data/initialData.ts
+    // 1. Save to Cloud Firestore for instant multi-device propagation
+    try {
+      await savePortfolioToFirestore(data);
+    } catch (cloudErr) {
+      console.warn('Failed to save to Cloud Firestore:', cloudErr);
+    }
+
+    // 2. Automatically sync directly to server and src/data/initialData.ts using auth token
     try {
       await fetch('/api/sync-data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
         body: JSON.stringify(data),
       });
     } catch (e) {
-      console.warn('Failed to sync data to initialData.ts', e);
+      console.warn('Failed to sync data to backend server', e);
     }
   };
 
-  // On mount, sync current state to source file if localStorage has modifications
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.profile) {
-          fetch('/api/sync-data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              profile: parsed.profile,
-              experienceNodes: parsed.experienceNodes || experienceNodes,
-              projects: parsed.projects || projects,
-              skills: parsed.skills || skills,
-              sections: parsed.sections || sections
-            }),
-          })
-          .then((r) => r.json())
-          .then((d) => console.log('Synced localStorage to initialData.ts:', d))
-          .catch((err) => console.warn('Could not sync to initialData.ts', err));
-        }
-      } catch (e) {}
-    }
-  }, []);
-
-  const handleResetData = () => {
+  const handleResetData = async () => {
     if (!isAuthorized) {
-      alert(`Access denied. Only the authorized owner (${AUTHORIZED_OWNER_EMAIL}) is permitted to reset data.`);
+      alert('Access denied. Administrator privileges are required to reset data.');
       return;
     }
     localStorage.removeItem(STORAGE_KEY);
@@ -211,6 +289,26 @@ export default function App() {
     setProjects(initialProjects);
     setSkills(initialSkills);
     setSections(initialSections);
+
+    const defaultData = {
+      profile: initialProfile,
+      experienceNodes: initialExperienceNodes,
+      projects: initialProjects,
+      skills: initialSkills,
+      sections: initialSections,
+    };
+
+    try {
+      await savePortfolioToFirestore(defaultData);
+      await fetch('/api/sync-data', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify(defaultData),
+      });
+    } catch (_) {}
   };
 
   const renderSection = (section: SectionConfig) => {
@@ -246,43 +344,6 @@ export default function App() {
   // Sort sections by order
   const sortedSections = [...sections].sort((a, b) => a.order - b.order);
 
-  const handleUpdateResumeUrl = async (newUrl: string) => {
-    const cleanUrl = newUrl?.trim() || '/resume.pdf';
-    const updatedProfile: Profile = { ...profile, resumeUrl: cleanUrl };
-    setProfile(updatedProfile);
-
-    // Persist full portfolio state to localStorage
-    const saved = localStorage.getItem(STORAGE_KEY);
-    let fullData = {
-      profile: updatedProfile,
-      experienceNodes,
-      projects,
-      skills,
-      sections
-    };
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        fullData = {
-          ...parsed,
-          profile: updatedProfile
-        };
-      } catch (e) {}
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(fullData));
-
-    // Persist to server source file src/data/initialData.ts
-    try {
-      await fetch('/api/sync-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fullData)
-      });
-    } catch (err) {
-      console.warn('Failed to sync updated resumeUrl to initialData.ts', err);
-    }
-  };
-
   return (
     <div id="portfolio-app-root" className="min-h-screen bg-white dark:bg-[#121212] text-stone-900 dark:text-stone-100 flex flex-col selection:bg-blue-500 selection:text-white transition-colors duration-200">
       {/* Chapters Progress Bar (Replaces traditional header) */}
@@ -317,7 +378,7 @@ export default function App() {
       />
 
       {/* Profile & Flowchart Customization Modal (accessible only to authorized owner) */}
-      {isAuthorized && (
+      {isAuthorized && isEditModalOpen && (
         <EditProfileModal
           isOpen={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
@@ -333,3 +394,4 @@ export default function App() {
     </div>
   );
 }
+

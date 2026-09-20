@@ -29,7 +29,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { Profile, ExperienceFlowNode, Project, SkillCategory, SectionConfig } from '../types';
-import { AUTHORIZED_OWNER_EMAIL, DEFAULT_OWNER_PASSKEY } from './AuthModal';
+import { AUTHORIZED_OWNER_EMAIL } from './AuthModal';
 import { saveResumePdf, getResumePdf, clearResumePdf, StoredPdfRecord } from '../utils/pdfStorage';
 import { ImageUploadField } from './ImageUploadField';
 import { MultiImageGalleryUpload } from './MultiImageGalleryUpload';
@@ -157,8 +157,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   onSave,
   onReset
 }) => {
-  if (!isOpen) return null;
-
   const [activeTab, setActiveTab] = useState<'profile' | 'experience' | 'projects' | 'skills' | 'layout'>('profile');
   const [editedProfile, setEditedProfile] = useState<Profile>({ ...profile });
   const [experienceCards, setExperienceCards] = useState<ExperienceCard[]>(() => groupNodesIntoCards(experienceNodes));
@@ -171,20 +169,32 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [editedSkills, setEditedSkills] = useState<SkillCategory[]>([...skills]);
   const [editedSections, setEditedSections] = useState<SectionConfig[]>([...sections]);
   const [savedFeedback, setSavedFeedback] = useState(false);
-  const [customPasskey, setCustomPasskey] = useState<string>('');
   const [storedPdfRecord, setStoredPdfRecord] = useState<StoredPdfRecord | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [pdfUploadMsg, setPdfUploadMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copiedFeedback, setCopiedFeedback] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setEditedProfile({ ...profile });
+      setExperienceCards(groupNodesIntoCards(experienceNodes));
+      setEditedProjects(
+        projects.map((p) => ({
+          ...p,
+          links: normalizeProjectLinks(p)
+        }))
+      );
+      setEditedSkills([...skills]);
+      setEditedSections([...sections]);
       getResumePdf()
         .then((rec) => {
           if (rec) setStoredPdfRecord(rec);
         })
         .catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, profile, experienceNodes, projects, skills, sections]);
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -241,16 +251,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   };
 
   const handleSave = () => {
-    const finalPasskey = customPasskey.trim();
-    if (finalPasskey) {
-      localStorage.setItem('portfolio_owner_passkey', finalPasskey);
-      fetch('/api/update-passkey', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newPasskey: finalPasskey })
-      }).catch(() => {});
-    }
-
     const finalExperienceNodes = flattenCardsToNodes(experienceCards);
     const finalProjects = editedProjects.map((p) => {
       const cleanLinks = (p.links || []).filter((l) => l.url && l.url.trim().length > 0);
@@ -688,10 +688,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     downloadAnchor.remove();
   };
 
-  const [copiedFeedback, setCopiedFeedback] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSuccess, setSyncSuccess] = useState(false);
-
   const handleCopyJSON = () => {
     const finalExperienceNodes = flattenCardsToNodes(experienceCards);
     const jsonStr = JSON.stringify({
@@ -733,6 +729,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       setIsSyncing(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -1186,34 +1184,19 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
               {/* Access Control & Security Section */}
               <div className="pt-4 border-t border-stone-200">
-                <div className="p-4 rounded-xl border border-stone-200 bg-stone-50/70 space-y-3">
+                <div className="p-4 rounded-xl border border-stone-200 bg-stone-50/70 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-stone-800" />
-                      <span className="font-semibold text-stone-900 text-xs">Owner Authorization & Access Control</span>
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span className="font-semibold text-stone-900 text-xs">Admin Access Control</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-md bg-stone-200/80 text-stone-700 text-[10px] font-mono">
-                      Restricted
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-mono font-medium">
+                      Google OAuth Protected
                     </span>
                   </div>
                   <p className="text-xs text-stone-500 leading-relaxed">
-                    Set a custom passkey required to unlock portfolio editing mode.
+                    Portfolio modifications are protected exclusively via Google Sign-In. Only authenticated administrator accounts can unlock and edit this portfolio.
                   </p>
-                  <div className="pt-1">
-                    <div className="space-y-1">
-                      <label className="font-mono text-stone-600 text-xs">Owner Passkey</label>
-                      <div className="relative">
-                        <input
-                          type="password"
-                          value={customPasskey}
-                          onChange={(e) => setCustomPasskey(e.target.value)}
-                          placeholder="•••••••• (leave blank to keep current)"
-                          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-stone-200 text-stone-900 text-xs font-mono focus:ring-1 focus:ring-stone-900 focus:outline-none"
-                        />
-                        <Key className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2" />
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>

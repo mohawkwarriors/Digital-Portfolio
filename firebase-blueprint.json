@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "PortfolioContent": {
+      "title": "Portfolio Content",
+      "description": "The centralized master portfolio content including profile, work experience, projects, skills, and section visibility",
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "object",
+          "description": "Personal profile data including title, summary, bio, avatar, and metrics"
+        },
+        "experienceNodes": {
+          "type": "array",
+          "description": "Chronological career flowchart milestones and company projects"
+        },
+        "projects": {
+          "type": "array",
+          "description": "Featured engineering case studies, tags, and media galleries"
+        },
+        "skills": {
+          "type": "array",
+          "description": "Categorized competencies with skill tags and proficiency meters"
+        },
+        "sections": {
+          "type": "array",
+          "description": "Section visibility ordering and configuration"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp or server timestamp of the last edit"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Email address of the authenticated owner who executed the save"
+        },
+        "ownerEmail": {
+          "type": "string",
+          "description": "Owner email address verifying ownership"
+        }
+      },
+      "required": ["profile", "experienceNodes", "projects", "skills", "sections", "ownerEmail"]
+    },
+    "AdminUser": {
+      "title": "Admin User",
+      "description": "Authorized administrators permitted to modify the portfolio",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Admin email address"
+        },
+        "role": {
+          "type": "string",
+          "description": "User role"
+        }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/portfolio/{docId}": {
+      "schema": "PortfolioContent",
+      "description": "Publicly readable portfolio master document, write-restricted strictly to authorized owner"
+    },
+    "/admins/{adminId}": {
+      "schema": "AdminUser",
+      "description": "List of authorized administrator user accounts"
+    }
+  }
+}

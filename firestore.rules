@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == 'saahiressa@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidPortfolio(data) {
+      return data.keys().hasAll(['profile', 'experienceNodes', 'projects', 'skills', 'sections', 'ownerEmail']) &&
+        data.ownerEmail.lower() == 'saahiressa@gmail.com' &&
+        data.profile is map &&
+        data.experienceNodes is list &&
+        data.projects is list &&
+        data.skills is list &&
+        data.sections is list;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Portfolio data: Publicly readable for all visitors; writable ONLY by verified owner
+    match /portfolio/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if true;
+      allow create, update: if isValidId(docId) && isOwner() && isValidPortfolio(request.resource.data);
+      allow delete: if isValidId(docId) && isOwner();
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isOwner();
+      allow write: if isOwner() && isValidId(adminId);
+    }
+  }
+}

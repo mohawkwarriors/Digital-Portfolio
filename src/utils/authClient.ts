@@ -51,12 +51,14 @@ export function getStoredToken(): string | null {
   try {
     const token = localStorage.getItem(TOKEN_KEY);
     const expiresStr = localStorage.getItem(EXPIRES_KEY);
-    if (!token || !expiresStr) return null;
+    if (!token) return null;
 
-    const expiresAt = parseInt(expiresStr, 10);
-    if (isNaN(expiresAt) || Date.now() > expiresAt) {
-      clearLocalSession();
-      return null;
+    if (expiresStr) {
+      const expiresAt = parseInt(expiresStr, 10);
+      if (!isNaN(expiresAt) && Date.now() > expiresAt) {
+        clearLocalSession();
+        return null;
+      }
     }
     return token;
   } catch {
@@ -80,6 +82,18 @@ export function getAuthHeaders(): Record<string, string> {
  */
 export function isLocalSessionValid(): boolean {
   return Boolean(getStoredToken());
+}
+
+/**
+ * Syncs a Firebase ID token into local session storage
+ */
+export function syncFirebaseSession(idToken: string, email: string = AUTHORIZED_OWNER_EMAIL) {
+  try {
+    const oneHourFromNow = Date.now() + 3600 * 1000;
+    saveSession(idToken, email, oneHourFromNow);
+  } catch (e) {
+    console.error('Failed to sync Firebase session:', e);
+  }
 }
 
 /**
@@ -151,62 +165,6 @@ export async function verifySessionWithServer(): Promise<boolean> {
 }
 
 /**
- * Executes login against /api/auth
- */
-export async function loginWithPasskey(
-  email: string,
-  passkey: string,
-  rememberMe: boolean = true
-): Promise<LoginResult> {
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanPasskey = passkey.trim();
-
-  try {
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        email: cleanEmail,
-        passkey: cleanPasskey,
-        rememberMe
-      })
-    });
-
-    const data = await res.json();
-
-    if (res.status === 429) {
-      return {
-        success: false,
-        locked: true,
-        retryAfterMinutes: data.retryAfterMinutes || 15,
-        message: data.message || 'Too many failed login attempts. Temporarily locked for security.'
-      };
-    }
-
-    if (res.ok && data.success && data.token) {
-      saveSession(data.token, data.email || AUTHORIZED_OWNER_EMAIL, data.expiresAt);
-      return {
-        success: true,
-        message: 'Successfully authenticated.'
-      };
-    }
-
-    return {
-      success: false,
-      message: data.message || 'Incorrect email or passkey.',
-      remainingAttempts: data.remainingAttempts
-    };
-  } catch (err) {
-    return {
-      success: false,
-      message: 'Network error connecting to authentication service. Please check your connection.'
-    };
-  }
-}
-
-/**
  * Logs out and invalidates the session token on the server
  */
 export async function logoutSession(): Promise<void> {
@@ -224,39 +182,4 @@ export async function logoutSession(): Promise<void> {
     }
   }
   clearLocalSession();
-}
-
-/**
- * Changes passkey on the server securely
- */
-export async function updateAdminPasskey(
-  currentPasskey: string,
-  newPasskey: string
-): Promise<{ success: boolean; message: string }> {
-  const token = getStoredToken();
-  if (!token) {
-    return { success: false, message: 'Authentication required. Please log in again.' };
-  }
-
-  try {
-    const res = await fetch('/api/update-passkey', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        currentPasskey: currentPasskey.trim(),
-        newPasskey: newPasskey.trim()
-      })
-    });
-
-    const data = await res.json();
-    if (res.ok && data.success) {
-      return { success: true, message: data.message || 'Passkey updated successfully' };
-    }
-    return { success: false, message: data.error || data.message || 'Failed to update passkey' };
-  } catch (err) {
-    return { success: false, message: 'Network error updating passkey' };
-  }
 }

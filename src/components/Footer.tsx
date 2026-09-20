@@ -99,11 +99,11 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={onOpenEdit}
                   id="footer-owner-edit-btn"
                   type="button"
-                  title="Edit portfolio (Owner access)"
+                  title={isAuthorized ? "Edit portfolio" : "Admin Login"}
                   className="inline-flex items-center gap-1 text-stone-400 hover:text-stone-700 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-stone-400 rounded px-1 -mx-1"
                 >
                   <Wrench className="w-3 h-3 text-stone-400" />
-                  <span>edit</span>
+                  <span>{isAuthorized ? 'edit' : 'admin login'}</span>
                 </button>
                 {isAuthorized && onLockAuth && (
                   <>

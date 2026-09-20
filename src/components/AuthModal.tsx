@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, ShieldCheck, AlertCircle, X, Key, Check, Eye, EyeOff, Clock, ShieldAlert } from 'lucide-react';
-import { loginWithPasskey, AUTHORIZED_OWNER_EMAIL } from '../utils/authClient';
+import { Lock, ShieldCheck, AlertCircle, X, Sparkles, Check } from 'lucide-react';
+import { syncFirebaseSession, AUTHORIZED_OWNER_EMAIL } from '../utils/authClient';
+import { signInWithGoogle } from '../utils/firebase';
 
 export { AUTHORIZED_OWNER_EMAIL };
-// For backward compatibility
-export const DEFAULT_OWNER_PASSKEY = '';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -13,73 +12,50 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const [passkey, setPasskey] = useState('');
-  const [showPasskey, setShowPasskey] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
-  const [isLocked, setIsLocked] = useState(false);
-  const [retryAfterMinutes, setRetryAfterMinutes] = useState<number | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [capsLockActive, setCapsLockActive] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      setPasskey('');
       setError(null);
       setIsSuccess(false);
-      setIsSubmitting(false);
+      setIsGoogleLoading(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.getModifierState && e.getModifierState('CapsLock')) {
-      setCapsLockActive(true);
-    } else {
-      setCapsLockActive(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting || isSuccess) return;
-
+  const handleGoogleSignIn = async () => {
+    if (isGoogleLoading || isSuccess) return;
     setError(null);
-    setIsSubmitting(true);
+    setIsGoogleLoading(true);
 
-    const cleanPasskey = passkey.trim();
-    if (!cleanPasskey) {
-      setError('Please enter your security passkey.');
-      setIsSubmitting(false);
-      return;
-    }
-
-    const result = await loginWithPasskey(AUTHORIZED_OWNER_EMAIL, cleanPasskey, rememberMe);
-
-    if (result.success) {
-      setIsSuccess(true);
-      setError(null);
-      setTimeout(() => {
-        setIsSuccess(false);
-        onSuccess();
-      }, 500);
-    } else {
-      if (result.locked) {
-        setIsLocked(true);
-        setRetryAfterMinutes(result.retryAfterMinutes || 15);
-        setError(result.message || 'Too many failed attempts. Temporary security lockout active.');
-      } else {
-        setError(result.message || 'Incorrect security passkey.');
-        if (typeof result.remainingAttempts === 'number') {
-          setRemainingAttempts(result.remainingAttempts);
+    try {
+      const res = await signInWithGoogle();
+      if (res.success && res.user) {
+        const userEmail = res.user.email?.toLowerCase().trim();
+        if (userEmail !== AUTHORIZED_OWNER_EMAIL.toLowerCase().trim()) {
+          setError('Access denied. This account does not have administrator privileges.');
+          setIsGoogleLoading(false);
+          return;
         }
-      }
-    }
 
-    setIsSubmitting(false);
+        const idToken = await res.user.getIdToken();
+        syncFirebaseSession(idToken, res.user.email || AUTHORIZED_OWNER_EMAIL);
+        setIsSuccess(true);
+        setTimeout(() => {
+          setIsSuccess(false);
+          onSuccess();
+        }, 400);
+      } else {
+        setError(res.error || 'Google Sign-In was cancelled or failed.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Google Sign-In authentication error.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -101,10 +77,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             </div>
             <div>
               <h3 id="auth-modal-title" className="text-base font-semibold text-stone-900 dark:text-stone-100 tracking-tight">
-                Owner Authentication
+                Admin Login
               </h3>
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                Unlock editing privileges
+                Sign in with Google to continue
               </p>
             </div>
           </div>
@@ -119,135 +95,78 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </button>
         </div>
 
-        {/* Verified Owner Identification Pill */}
-        <div className="p-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/70 border border-stone-200/80 dark:border-stone-700/80 flex items-center gap-2.5 text-xs">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-mono text-stone-500 dark:text-stone-400 uppercase tracking-wider">Authorized Account</div>
-            <div className="font-mono text-xs font-semibold text-stone-800 dark:text-stone-200 truncate">{AUTHORIZED_OWNER_EMAIL}</div>
-          </div>
-          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        </div>
-
-        {/* Lockout Notice */}
-        {isLocked && (
-          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-800 dark:text-amber-300 space-y-1">
-            <div className="flex items-center gap-1.5 font-semibold">
-              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>Security Lockout Active</span>
-            </div>
-            <p className="text-[11px] text-amber-700 dark:text-amber-300/90 leading-relaxed">
-              Exceeded maximum login attempts. Please wait {retryAfterMinutes || 15} minute(s) before retrying.
-            </p>
-          </div>
-        )}
-
         {/* Error message */}
-        {error && !isLocked && (
+        {error && (
           <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <span>{error}</span>
-              {remainingAttempts !== null && remainingAttempts > 0 && (
-                <div className="text-[11px] text-red-600/80 dark:text-red-400/80">
-                  {remainingAttempts} attempt{remainingAttempts === 1 ? '' : 's'} remaining before temporary security lockout.
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {/* Caps Lock Alert */}
-        {capsLockActive && (
-          <div className="px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-[11px] text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Caps Lock is ON</span>
+        {/* Success message */}
+        {isSuccess && (
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span className="font-medium">Authentication successful! Unlocking admin mode...</span>
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label htmlFor="auth-passkey-input" className="block text-xs font-medium text-stone-700 dark:text-stone-300">
-              Security Passkey
-            </label>
-            <div className="relative">
-              <input
-                id="auth-passkey-input"
-                type={showPasskey ? 'text' : 'password'}
-                autoFocus
-                required
-                disabled={isLocked || isSubmitting || isSuccess}
-                value={passkey}
-                onChange={(e) => setPasskey(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onKeyUp={handleKeyDown}
-                placeholder="Enter owner passkey..."
-                className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 text-xs focus:bg-white dark:focus:bg-stone-900 focus:outline-none focus:ring-2 focus:ring-stone-900 dark:focus:ring-stone-400 transition-all font-mono disabled:opacity-60"
-              />
-              <Key className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-3" />
-              <button
-                type="button"
-                onClick={() => setShowPasskey(!showPasskey)}
-                className="p-1.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 absolute right-2 top-1.5 cursor-pointer"
-                title={showPasskey ? 'Hide passkey' : 'Show passkey'}
-                tabIndex={-1}
-              >
-                {showPasskey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
+        {/* Exclusive Google Sign-In CTA */}
+        <div className="space-y-3 pt-1">
+          <button
+            type="button"
+            id="google-sign-in-btn"
+            onClick={handleGoogleSignIn}
+            disabled={isGoogleLoading || isSuccess}
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-900 text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-60"
+          >
+            {isGoogleLoading ? (
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 animate-spin" />
+                Signing in with Google...
+              </span>
+            ) : isSuccess ? (
+              <span className="flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                Authorized
+              </span>
+            ) : (
+              <>
+                <svg className="w-4 h-4 shrink-0 bg-white rounded-full p-0.5" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                  />
+                </svg>
+                <span>Sign in with Google</span>
+              </>
+            )}
+          </button>
 
-          {/* Remember this device checkbox */}
-          <div className="flex items-center justify-between text-xs pt-0.5">
-            <label className="flex items-center gap-2 cursor-pointer select-none text-stone-600 dark:text-stone-400">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-stone-300 text-stone-900 focus:ring-stone-900 accent-stone-900"
-              />
-              <span className="text-[11px]">Remember login for 30 days</span>
-            </label>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100 dark:border-stone-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3.5 py-2 rounded-xl text-xs font-medium text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              id="auth-submit-btn"
-              disabled={isSubmitting || isSuccess || isLocked || !passkey.trim()}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-stone-200 dark:text-stone-900 text-white text-xs font-medium shadow-xs disabled:opacity-50 transition-colors cursor-pointer"
-            >
-              {isSuccess ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400 dark:text-emerald-600" />
-                  <span>Verified & Unlocked</span>
-                </>
-              ) : isSubmitting ? (
-                <span>Verifying...</span>
-              ) : (
-                <>
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Unlock Admin</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+          <p className="text-[11px] text-stone-500 dark:text-stone-400 text-center leading-relaxed">
+            Please sign in with an authorized Google account to continue.
+          </p>
+        </div>
 
         {/* Security badge footer */}
-        <div className="pt-2 text-center">
+        <div className="pt-2 border-t border-stone-100 dark:border-stone-800 text-center">
           <p className="text-[10px] text-stone-400 font-mono flex items-center justify-center gap-1.5">
             <ShieldCheck className="w-3 h-3 text-emerald-500" />
-            <span>Cryptographic Session • Anti-Brute-Force Protected</span>
+            <span>Secure OAuth 2.0 Authentication</span>
           </p>
         </div>
       </div>
