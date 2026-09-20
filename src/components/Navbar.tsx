@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, FolderGit2, Mail, Layers, Menu, X, ArrowUpRight } from 'lucide-react';
+import { Briefcase, FolderGit2, Mail, Layers, Menu, X, ArrowUpRight, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence, useScroll, useSpring } from 'motion/react';
 import { Profile } from '../types';
+import { getCurrentEnvironment } from '../utils/firebase';
 
 interface NavbarProps {
   profile: Profile;
@@ -65,9 +66,19 @@ export const Navbar: React.FC<NavbarProps> = ({ profile }) => {
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-sm tracking-tight text-stone-900 group-hover:text-stone-600 transition-colors">
-              {profile.name}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-sm tracking-tight text-stone-900 group-hover:text-stone-600 transition-colors">
+                {profile.name}
+              </span>
+              {getCurrentEnvironment() === 'staging' && (
+                <span 
+                  title="Testing & Development Preview. Production site is protected from edits made here."
+                  className="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300/80 shadow-2xs"
+                >
+                  Staging
+                </span>
+              )}
+            </div>
             <span className="text-[11px] text-stone-400 hidden sm:inline-block font-mono">
               Product Design Engineering
             </span>

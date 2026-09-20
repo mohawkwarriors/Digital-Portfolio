@@ -84,10 +84,41 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   return errInfo;
 }
 
+// Environment Detection: Isolate development / AI Studio testing from live production
+export type AppEnvironment = 'production' | 'staging';
+
+export function getCurrentEnvironment(): AppEnvironment {
+  if (typeof window === 'undefined') {
+    return process.env.NODE_ENV === 'production' ? 'production' : 'staging';
+  }
+  const host = window.location.hostname.toLowerCase();
+  // If running in AI Studio dev/pre container or local development, isolate into staging
+  if (
+    host.includes('run.app') ||
+    host.includes('localhost') ||
+    host.includes('127.0.0.1') ||
+    host.includes('webcontainer') ||
+    host.includes('preview')
+  ) {
+    return 'staging';
+  }
+  return 'production';
+}
+
+export function getPortfolioDocPath(env: AppEnvironment = getCurrentEnvironment()): string {
+  return env === 'production' ? 'portfolio/content' : 'portfolio/staging';
+}
+
+export function getPortfolioDocRef(env: AppEnvironment = getCurrentEnvironment()) {
+  const docId = env === 'production' ? 'content' : 'staging';
+  return doc(db, 'portfolio', docId);
+}
+
 // Test connectivity as per guidelines
 export async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'portfolio', 'content'));
+    const activeRef = getPortfolioDocRef();
+    await getDocFromServer(activeRef);
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase connection: client appears offline.');
@@ -107,23 +138,23 @@ export interface PortfolioData {
   updatedAt?: string;
   updatedBy?: string;
   ownerEmail?: string;
+  environment?: string;
 }
 
-const PORTFOLIO_DOC_PATH = 'portfolio/content';
-
 /**
- * Fetch portfolio data directly from Cloud Firestore
+ * Fetch portfolio data directly from Cloud Firestore for a specified or active environment
  */
-export async function fetchPortfolioFromFirestore(): Promise<PortfolioData | null> {
+export async function fetchPortfolioFromFirestore(env: AppEnvironment = getCurrentEnvironment()): Promise<PortfolioData | null> {
+  const path = getPortfolioDocPath(env);
   try {
-    const portfolioDocRef = doc(db, 'portfolio', 'content');
+    const portfolioDocRef = getPortfolioDocRef(env);
     const docSnap = await getDoc(portfolioDocRef);
     if (docSnap.exists()) {
       return docSnap.data() as PortfolioData;
     }
     return null;
   } catch (err) {
-    handleFirestoreError(err, OperationType.GET, PORTFOLIO_DOC_PATH);
+    handleFirestoreError(err, OperationType.GET, path);
     return null;
   }
 }
@@ -133,9 +164,11 @@ export async function fetchPortfolioFromFirestore(): Promise<PortfolioData | nul
  */
 export function subscribeToPortfolio(
   onData: (data: PortfolioData) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  env: AppEnvironment = getCurrentEnvironment()
 ): Unsubscribe {
-  const portfolioDocRef = doc(db, 'portfolio', 'content');
+  const path = getPortfolioDocPath(env);
+  const portfolioDocRef = getPortfolioDocRef(env);
   return onSnapshot(
     portfolioDocRef,
     (snapshot) => {
@@ -146,7 +179,7 @@ export function subscribeToPortfolio(
     (error) => {
       console.warn('Portfolio subscription notice:', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.GET, PORTFOLIO_DOC_PATH);
+      handleFirestoreError(error, OperationType.GET, path);
     }
   );
 }
@@ -171,17 +204,21 @@ export function sanitizeForFirestore<T>(val: T): T {
 }
 
 /**
- * Persist portfolio changes to Cloud Firestore
+ * Persist portfolio changes to Cloud Firestore in the active or target environment
  */
-export async function savePortfolioToFirestore(data: {
-  profile: Profile;
-  experienceNodes: ExperienceFlowNode[];
-  projects: Project[];
-  skills: SkillCategory[];
-  sections: SectionConfig[];
-}): Promise<boolean> {
+export async function savePortfolioToFirestore(
+  data: {
+    profile: Profile;
+    experienceNodes: ExperienceFlowNode[];
+    projects: Project[];
+    skills: SkillCategory[];
+    sections: SectionConfig[];
+  },
+  targetEnv: AppEnvironment = getCurrentEnvironment()
+): Promise<boolean> {
+  const path = getPortfolioDocPath(targetEnv);
   try {
-    const portfolioDocRef = doc(db, 'portfolio', 'content');
+    const portfolioDocRef = getPortfolioDocRef(targetEnv);
     const rawPayload: PortfolioData = {
       profile: data.profile,
       experienceNodes: data.experienceNodes,
@@ -189,6 +226,7 @@ export async function savePortfolioToFirestore(data: {
       skills: data.skills,
       sections: data.sections,
       ownerEmail: AUTHORIZED_OWNER_EMAIL,
+      environment: targetEnv,
       updatedAt: new Date().toISOString(),
       updatedBy: auth.currentUser?.email || AUTHORIZED_OWNER_EMAIL
     };
@@ -198,8 +236,46 @@ export async function savePortfolioToFirestore(data: {
     await setDoc(portfolioDocRef, cleanPayload, { merge: true });
     return true;
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, PORTFOLIO_DOC_PATH);
+    handleFirestoreError(err, OperationType.WRITE, path);
     return false;
+  }
+}
+
+/**
+ * Promote Staging content directly to Live Production
+ */
+export async function promoteStagingToProduction(): Promise<{ success: boolean; message: string }> {
+  try {
+    const stagingData = await fetchPortfolioFromFirestore('staging');
+    if (!stagingData) {
+      return { success: false, message: 'No staging data found to promote.' };
+    }
+    const success = await savePortfolioToFirestore(stagingData, 'production');
+    if (success) {
+      return { success: true, message: 'Staging changes successfully published to Live Production!' };
+    }
+    return { success: false, message: 'Failed to write staging data to production.' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Error promoting staging to production.' };
+  }
+}
+
+/**
+ * Pull Live Production content into Staging
+ */
+export async function pullProductionToStaging(): Promise<{ success: boolean; data?: PortfolioData; message: string }> {
+  try {
+    const prodData = await fetchPortfolioFromFirestore('production');
+    if (!prodData) {
+      return { success: false, message: 'No production data found.' };
+    }
+    const success = await savePortfolioToFirestore(prodData, 'staging');
+    if (success) {
+      return { success: true, data: prodData, message: 'Successfully refreshed staging with live production data!' };
+    }
+    return { success: false, message: 'Failed to update staging with production data.' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Error pulling production data.' };
   }
 }
 

@@ -30,7 +30,11 @@ import {
   Database,
   AlertCircle,
   History,
-  FileJson
+  FileJson,
+  Globe,
+  ArrowRightCircle,
+  ShieldAlert,
+  Server
 } from 'lucide-react';
 import { Profile, ExperienceFlowNode, Project, SkillCategory, SectionConfig } from '../types';
 import { AUTHORIZED_OWNER_EMAIL } from './AuthModal';
@@ -38,6 +42,12 @@ import { saveResumePdf, getResumePdf, clearResumePdf, StoredPdfRecord } from '..
 import { ImageUploadField } from './ImageUploadField';
 import { MultiImageGalleryUpload } from './MultiImageGalleryUpload';
 import { normalizeProjectLinks } from '../utils/projectLinks';
+import { 
+  getCurrentEnvironment, 
+  getPortfolioDocPath, 
+  promoteStagingToProduction, 
+  pullProductionToStaging 
+} from '../utils/firebase';
 
 export interface LocalSnapshot {
   id: string;
@@ -198,6 +208,8 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [backupStatus, setBackupStatus] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [isPromoting, setIsPromoting] = useState(false);
+  const [isPullingProd, setIsPullingProd] = useState(false);
   const [localSnapshots, setLocalSnapshots] = useState<LocalSnapshot[]>(() => {
     try {
       const saved = localStorage.getItem('portfolio_backup_snapshots');
@@ -927,6 +939,47 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       console.warn('Sync failed:', e);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handlePromoteToProduction = async () => {
+    if (!confirm('Are you sure you want to publish your current Staging content to Live Production?\n\nThis will update what recruiters and live visitors see on your production domain.')) {
+      return;
+    }
+    setIsPromoting(true);
+    setBackupStatus({ type: 'info', text: 'Promoting staging changes to live production...' });
+    try {
+      const res = await promoteStagingToProduction();
+      if (res.success) {
+        setBackupStatus({ type: 'success', text: res.message });
+      } else {
+        setBackupStatus({ type: 'error', text: res.message });
+      }
+    } catch (err: any) {
+      setBackupStatus({ type: 'error', text: err?.message || 'Failed to promote to production' });
+    } finally {
+      setIsPromoting(false);
+    }
+  };
+
+  const handlePullFromProduction = async () => {
+    if (!confirm('Pull latest Live Production content into Staging?\n\nThis will overwrite any uncommitted test changes in Staging with what is currently live on your production website.')) {
+      return;
+    }
+    setIsPullingProd(true);
+    setBackupStatus({ type: 'info', text: 'Fetching live production content from Cloud Firestore...' });
+    try {
+      const res = await pullProductionToStaging();
+      if (res.success && res.data) {
+        applyBackupData(res.data, 'Synced from Live Production');
+        setBackupStatus({ type: 'success', text: res.message });
+      } else {
+        setBackupStatus({ type: 'error', text: res.message });
+      }
+    } catch (err: any) {
+      setBackupStatus({ type: 'error', text: err?.message || 'Failed to pull from production' });
+    } finally {
+      setIsPullingProd(false);
     }
   };
 
@@ -2719,6 +2772,61 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   </button>
                 </div>
               )}
+
+              {/* Environment Isolation & Production Protection Banner */}
+              <div className="p-5 rounded-2xl border border-amber-200/80 bg-amber-50/50 space-y-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 shrink-0 mt-0.5">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-stone-900 text-sm">
+                          Environment Isolation & Production Safety
+                        </h3>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase tracking-wider ${
+                          getCurrentEnvironment() === 'staging'
+                            ? 'bg-amber-200/80 text-amber-900 border border-amber-300'
+                            : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        }`}>
+                          Active: {getCurrentEnvironment()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-stone-600 leading-relaxed">
+                        {getCurrentEnvironment() === 'staging'
+                          ? 'You are running in the AI Studio testing preview. All changes saved here write to a dedicated isolated Firestore document (portfolio/staging). Your live production portfolio seen by recruiters is protected and untouched.'
+                          : 'You are on your live production domain. All changes will publish directly to the live portfolio (portfolio/content).'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {getCurrentEnvironment() === 'staging' && (
+                  <div className="pt-2 border-t border-amber-200/60 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <button
+                      type="button"
+                      id="publish-staging-to-prod-btn"
+                      disabled={isPromoting || isPullingProd}
+                      onClick={handlePromoteToProduction}
+                      className="inline-flex items-center justify-center gap-2 py-2 px-3.5 rounded-xl bg-amber-900 hover:bg-amber-950 disabled:opacity-50 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                    >
+                      <ArrowRightCircle className="w-3.5 h-3.5" />
+                      <span>{isPromoting ? 'Publishing to Production...' : 'Publish Staging to Live Production'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="pull-prod-to-staging-btn"
+                      disabled={isPromoting || isPullingProd}
+                      onClick={handlePullFromProduction}
+                      className="inline-flex items-center justify-center gap-2 py-2 px-3.5 rounded-xl bg-white hover:bg-amber-100/60 disabled:opacity-50 text-amber-900 border border-amber-300 text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isPullingProd ? 'animate-spin' : ''}`} />
+                      <span>{isPullingProd ? 'Pulling from Production...' : 'Pull Latest from Live Production'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Action Cards: Export & Import */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
