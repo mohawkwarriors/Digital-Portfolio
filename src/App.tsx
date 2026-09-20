@@ -13,6 +13,8 @@ import { ResumeModal } from './components/ResumeModal';
 import { 
   subscribeToPortfolio, 
   savePortfolioToFirestore, 
+  fetchPortfolioFromFirestore,
+  getCurrentEnvironment,
   auth, 
   logoutFirebase, 
   AUTHORIZED_OWNER_EMAIL, 
@@ -173,7 +175,20 @@ export default function App() {
 
   // Real-time Cloud Synchronization across all devices
   useEffect(() => {
-    // 1. Subscribe to Cloud Firestore real-time updates
+    const env = getCurrentEnvironment();
+
+    // App Studio always pulls the latest live data from production on startup
+    if (env === 'staging') {
+      fetchPortfolioFromFirestore('production')
+        .then((prodData) => {
+          if (prodData && prodData.profile) {
+            applyRemoteData(prodData);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 1. Subscribe to Cloud Firestore real-time updates (uses current environment with automatic fallback)
     const unsubscribeFirestore = subscribeToPortfolio(
       (cloudData) => {
         if (cloudData) {
@@ -182,7 +197,8 @@ export default function App() {
       },
       (err) => {
         console.warn('Firestore real-time subscription note:', err);
-      }
+      },
+      env
     );
 
     // 2. Query fallback server API /api/portfolio-data
@@ -236,7 +252,8 @@ export default function App() {
     setIsEditModalOpen(true);
   };
 
-  // Sync to Cloud Firestore, localStorage, and server source file
+  // Sync to Cloud Firestore and localStorage
+  // In App Studio, edits are isolated to staging and do NOT propagate to live production
   const handleSaveData = async (data: {
     profile: Profile;
     experienceNodes: ExperienceFlowNode[];
@@ -256,25 +273,30 @@ export default function App() {
     setSections(data.sections);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 
-    // 1. Save to Cloud Firestore for instant multi-device propagation
+    const env = getCurrentEnvironment();
+
+    // 1. Save to Cloud Firestore
+    // When editing in App Studio (staging), saves to isolated staging so changes do NOT propagate to live production
     try {
-      await savePortfolioToFirestore(data);
+      await savePortfolioToFirestore(data, env);
     } catch (cloudErr) {
       console.warn('Failed to save to Cloud Firestore:', cloudErr);
     }
 
-    // 2. Automatically sync directly to server and src/data/initialData.ts using auth token
-    try {
-      await fetch('/api/sync-data', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify(data),
-      });
-    } catch (e) {
-      console.warn('Failed to sync data to backend server', e);
+    // 2. Only sync server codebase if directly editing in production
+    if (env === 'production') {
+      try {
+        await fetch('/api/sync-data', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            ...getAuthHeaders()
+          },
+          body: JSON.stringify(data),
+        });
+      } catch (e) {
+        console.warn('Failed to sync data to backend server', e);
+      }
     }
   };
 

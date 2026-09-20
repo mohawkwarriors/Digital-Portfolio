@@ -143,14 +143,23 @@ export interface PortfolioData {
 
 /**
  * Fetch portfolio data directly from Cloud Firestore for a specified or active environment
+ * Always falls back to the complementary document if the target document does not exist yet
  */
 export async function fetchPortfolioFromFirestore(env: AppEnvironment = getCurrentEnvironment()): Promise<PortfolioData | null> {
   const path = getPortfolioDocPath(env);
   try {
     const portfolioDocRef = getPortfolioDocRef(env);
     const docSnap = await getDoc(portfolioDocRef);
-    if (docSnap.exists()) {
+    if (docSnap.exists() && docSnap.data()?.profile) {
       return docSnap.data() as PortfolioData;
+    }
+    // Fallback: If target document does not exist, check the complementary document
+    // so no environment or incognito session is left with empty data
+    const fallbackEnv = env === 'production' ? 'staging' : 'production';
+    const fallbackRef = getPortfolioDocRef(fallbackEnv);
+    const fallbackSnap = await getDoc(fallbackRef);
+    if (fallbackSnap.exists() && fallbackSnap.data()?.profile) {
+      return fallbackSnap.data() as PortfolioData;
     }
     return null;
   } catch (err) {
@@ -161,27 +170,57 @@ export async function fetchPortfolioFromFirestore(env: AppEnvironment = getCurre
 
 /**
  * Real-time listener for portfolio changes across all devices
+ * Seamlessly listens to fallback if the primary document is not yet published
  */
 export function subscribeToPortfolio(
   onData: (data: PortfolioData) => void,
   onError?: (err: Error) => void,
   env: AppEnvironment = getCurrentEnvironment()
 ): Unsubscribe {
-  const path = getPortfolioDocPath(env);
-  const portfolioDocRef = getPortfolioDocRef(env);
-  return onSnapshot(
-    portfolioDocRef,
+  const primaryDocId = env === 'production' ? 'content' : 'staging';
+  const primaryRef = doc(db, 'portfolio', primaryDocId);
+  let fallbackUnsubscribe: Unsubscribe | null = null;
+  let hasReceivedPrimary = false;
+
+  const primaryUnsubscribe = onSnapshot(
+    primaryRef,
     (snapshot) => {
-      if (snapshot.exists()) {
+      if (snapshot.exists() && snapshot.data()?.profile) {
+        hasReceivedPrimary = true;
         onData(snapshot.data() as PortfolioData);
+      } else if (!hasReceivedPrimary) {
+        // Primary doc is not yet created or empty (e.g. production not yet initialized);
+        // fall back to the other doc so incognito and public visitors always see up-to-date data!
+        const fallbackDocId = primaryDocId === 'content' ? 'staging' : 'content';
+        const fallbackRef = doc(db, 'portfolio', fallbackDocId);
+        if (!fallbackUnsubscribe) {
+          fallbackUnsubscribe = onSnapshot(
+            fallbackRef,
+            (fbSnap) => {
+              if (fbSnap.exists() && fbSnap.data()?.profile && !hasReceivedPrimary) {
+                onData(fbSnap.data() as PortfolioData);
+              }
+            },
+            (fbErr) => {
+              console.warn('Fallback portfolio subscription note:', fbErr);
+            }
+          );
+        }
       }
     },
     (error) => {
       console.warn('Portfolio subscription notice:', error);
       if (onError) onError(error);
-      handleFirestoreError(error, OperationType.GET, path);
+      handleFirestoreError(error, OperationType.GET, getPortfolioDocPath(env));
     }
   );
+
+  return () => {
+    primaryUnsubscribe();
+    if (fallbackUnsubscribe) {
+      fallbackUnsubscribe();
+    }
+  };
 }
 
 export function sanitizeForFirestore<T>(val: T): T {

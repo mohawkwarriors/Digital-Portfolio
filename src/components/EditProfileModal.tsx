@@ -204,9 +204,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [storedPdfRecord, setStoredPdfRecord] = useState<StoredPdfRecord | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [pdfUploadMsg, setPdfUploadMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [copiedFeedback, setCopiedFeedback] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSuccess, setSyncSuccess] = useState(false);
   const [backupStatus, setBackupStatus] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [isPromoting, setIsPromoting] = useState(false);
   const [isPullingProd, setIsPullingProd] = useState(false);
@@ -900,48 +897,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setTimeout(() => setBackupStatus(null), 4000);
   };
 
-  const handleCopyJSON = () => {
-    const finalExperienceNodes = flattenCardsToNodes(experienceCards);
-    const jsonStr = JSON.stringify({
-      profile: editedProfile,
-      experienceNodes: finalExperienceNodes,
-      projects: editedProjects,
-      skills: editedSkills,
-      sections: editedSections
-    }, null, 2);
-
-    navigator.clipboard.writeText(jsonStr);
-    setCopiedFeedback(true);
-    setTimeout(() => setCopiedFeedback(false), 2000);
-  };
-
-  const handleSyncToCodebase = async () => {
-    setIsSyncing(true);
-    const finalExperienceNodes = flattenCardsToNodes(experienceCards);
-    const payload = {
-      profile: editedProfile,
-      experienceNodes: finalExperienceNodes,
-      projects: editedProjects,
-      skills: editedSkills,
-      sections: editedSections
-    };
-    try {
-      const res = await fetch('/api/sync-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        setSyncSuccess(true);
-        setTimeout(() => setSyncSuccess(false), 2500);
-      }
-    } catch (e) {
-      console.warn('Sync failed:', e);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const handlePromoteToProduction = async () => {
     if (!confirm('Are you sure you want to publish your current Staging content to Live Production?\n\nThis will update what recruiters and live visitors see on your production domain.')) {
       return;
@@ -1007,68 +962,9 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleSyncToCodebase}
-              disabled={isSyncing}
-              type="button"
-              className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
-                syncSuccess 
-                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                  : 'border-stone-200 hover:bg-stone-100 text-stone-700'
-              }`}
-              title="Sync current changes directly into source code (src/data/initialData.ts)"
-            >
-              {syncSuccess ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="hidden sm:inline">Synced to Code!</span>
-                  <span className="sm:hidden">Synced!</span>
-                </>
-              ) : isSyncing ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-stone-500" />
-                  <span>Syncing...</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="hidden sm:inline">Sync to Codebase</span>
-                  <span className="sm:hidden">Sync</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={handleCopyJSON}
-              type="button"
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-600"
-              title="Copy Portfolio JSON to clipboard"
-            >
-              {copiedFeedback ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy JSON</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={handleExportJSON}
-              type="button"
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-mono px-2.5 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-600"
-              title="Export Portfolio as JSON file"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
-
-            <button
               onClick={onClose}
-              className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+              title="Close modal"
             >
               <X className="w-5 h-5" />
             </button>
@@ -2856,23 +2752,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="pt-1">
                     <button
                       type="button"
                       id="export-backup-btn"
                       onClick={handleExportJSON}
-                      className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>Download Backup (.json)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCopyJSON}
-                      className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 transition-colors cursor-pointer"
-                      title="Copy JSON to clipboard"
-                    >
-                      {copiedFeedback ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
