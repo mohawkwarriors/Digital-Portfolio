@@ -1,12 +1,12 @@
 {
-  "projectId": "sanguine-spot-707pf",
-  "appId": "1:828985697135:web:c192cdde676699b3a3be9a",
-  "apiKey": "AIzaSyCA87GNNcS01iK3uOclCfpNiuaRUpbaQJw",
-  "authDomain": "sanguine-spot-707pf.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-digitalportfolio-61e2c8e5-b3c4-40e9-b770-f1153aeda60d",
-  "storageBucket": "sanguine-spot-707pf.firebasestorage.app",
-  "messagingSenderId": "828985697135",
+  "projectId": "profile-71483",
+  "appId": "1:11998863542:web:f4eb8841d596ecfd758617",
+  "apiKey": "AIzaSyCPu6__0D5KPpo0A36eT-d4sB8w_iAVe88",
+  "authDomain": "profile-71483.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "profile-71483.firebasestorage.app",
+  "messagingSenderId": "11998863542",
   "measurementId": "",
-  "oAuthClientId": "828985697135-c3542os0ekc0k92n376fgk3u5vhegtle.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

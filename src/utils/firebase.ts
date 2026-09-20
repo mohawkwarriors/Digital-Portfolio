@@ -22,8 +22,10 @@ import { Profile, ExperienceFlowNode, Project, SkillCategory, SectionConfig } fr
 // Initialize Firebase App instance
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with explicit databaseId from configuration
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Firestore (support default database or specified databaseId)
+export const db = (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)')
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 
 // Initialize Firebase Auth
 export const auth = getAuth(app);
@@ -222,9 +224,16 @@ export async function signInWithGoogle(): Promise<{ success: boolean; user?: Use
     return { success: true, user };
   } catch (err: any) {
     console.error('Google Sign In failed:', err);
+    let errorMessage = err?.message || 'Failed to complete Google Sign In';
+
+    if (err?.code === 'auth/unauthorized-domain') {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      errorMessage = `Domain unauthorized: "${currentHost}" must be added to Authorized Domains in Firebase Console (Authentication > Settings > Authorized domains).`;
+    }
+
     return {
       success: false,
-      error: err?.message || 'Failed to complete Google Sign In'
+      error: errorMessage
     };
   }
 }
