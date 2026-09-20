@@ -131,27 +131,32 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
           </div>
         </motion.div>
 
-        {/* Minimalist Stats */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className={`grid grid-cols-2 ${
-            profile.stats.length === 1 ? 'md:grid-cols-1' :
-            profile.stats.length === 2 ? 'md:grid-cols-2' :
-            profile.stats.length === 3 ? 'md:grid-cols-3' :
-            profile.stats.length === 4 ? 'md:grid-cols-4' :
-            profile.stats.length === 5 ? 'md:grid-cols-5' :
-            'md:grid-cols-4 lg:grid-cols-6'
-          } gap-6 py-8 border-y border-stone-200 dark:border-stone-800`}
-        >
-          {profile.stats.map((stat, idx) => (
-            <div key={idx} className="space-y-1">
-              <div className="text-3xl font-bold text-stone-900 dark:text-stone-100 font-mono">{stat.value}</div>
-              <div className="text-sm text-stone-500 dark:text-stone-400">{stat.label}</div>
+        {/* Highlights / Stats: Evenly spaced across the screen width */}
+        {profile.stats && profile.stats.length > 0 && (
+          <motion.div 
+            id="hero-highlights-stats"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="py-8 border-y border-stone-200 dark:border-stone-800"
+          >
+            <div className="grid grid-cols-2 sm:flex sm:items-start sm:justify-between gap-6 sm:gap-4 w-full">
+              {profile.stats.map((stat, idx) => (
+                <div 
+                  key={idx} 
+                  className="flex-1 flex flex-col items-center text-center px-2 min-w-0"
+                >
+                  <div className="text-2xl sm:text-3xl font-bold text-stone-900 dark:text-stone-100 font-mono tracking-tight text-center leading-none">
+                    {stat.value}
+                  </div>
+                  <div className="mt-2 text-[11px] sm:text-xs text-stone-500 dark:text-stone-400 font-medium leading-relaxed text-center max-w-[200px]">
+                    {stat.label}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </motion.div>
+          </motion.div>
+        )}
       </div>
     </section>
   );
