@@ -81,10 +81,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
 
         {/* Project Description */}
         <div className="space-y-1.5">
-          <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-400">
+          <h4 className="text-xs sm:text-[12.5px] font-mono uppercase tracking-wider text-stone-500 dark:text-stone-400 font-semibold">
             Overview
           </h4>
-          <p className="text-stone-700 text-xs sm:text-sm leading-relaxed">
+          <p className="text-stone-700 dark:text-stone-300 text-[15px] sm:text-base leading-relaxed font-normal">
             {project.description}
           </p>
         </div>
@@ -92,13 +92,13 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
         {/* Key Highlights / Engineering Highlights */}
         {project.challengesSolved && project.challengesSolved.length > 0 && (
           <div className="space-y-1.5">
-            <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-400">
+            <h4 className="text-xs sm:text-[12.5px] font-mono uppercase tracking-wider text-stone-500 dark:text-stone-400 font-semibold">
               Key Engineering Highlights
             </h4>
             <ul className="space-y-2">
               {project.challengesSolved.map((bullet, bIdx) => (
-                <li key={bIdx} className="flex items-start gap-2.5 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 mt-2 shrink-0" />
+                <li key={bIdx} className="flex items-start gap-2.5 text-[15.5px] sm:text-[16.5px] text-stone-700 dark:text-stone-300 leading-relaxed font-normal">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 shrink-0" />
                   <span>{bullet}</span>
                 </li>
               ))}
@@ -109,17 +109,17 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) 
         {/* Key Performance Specifications */}
         {project.metrics && project.metrics.length > 0 && (
           <div className="space-y-1.5">
-            <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-400 flex items-center gap-1.5">
-              <TrendingUp className="w-3 h-3 text-stone-500" />
+            <h4 className="text-xs sm:text-[12.5px] font-mono uppercase tracking-wider text-stone-500 dark:text-stone-400 font-semibold flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
               <span>Key Performance Specifications</span>
             </h4>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {project.metrics.map((metric, idx) => (
-                <div key={idx} className="p-2.5 rounded-lg bg-stone-50 border border-stone-200/80 text-center flex flex-col justify-center min-h-[58px]">
-                  <div className="text-sm sm:text-base font-mono font-semibold text-stone-900 break-words leading-tight">
+                <div key={idx} className="p-2.5 rounded-lg bg-stone-50 dark:bg-stone-800 border border-stone-200/80 dark:border-stone-700 text-center flex flex-col justify-center min-h-[58px]">
+                  <div className="text-sm sm:text-base font-mono font-semibold text-stone-900 dark:text-stone-100 break-words leading-tight">
                     {metric.value || '—'}
                   </div>
-                  <div className="text-[10.5px] text-stone-500 mt-1 leading-snug break-words">
+                  <div className="text-xs sm:text-[12.5px] text-stone-500 dark:text-stone-400 mt-1 leading-snug break-words">
                     {metric.label || 'Specification'}
                   </div>
                 </div>

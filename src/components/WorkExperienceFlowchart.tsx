@@ -277,11 +277,11 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                           />
                         </div>
                       ) : (
-                        <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100 transition-colors group-hover/header:text-blue-600 dark:group-hover/header:text-blue-400">
+                        <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100 transition-colors group-hover/header:text-blue-600 dark:group-hover/header:text-blue-400">
                           {group.company}
                         </h3>
                       )}
-                      <div className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-400 mt-1 font-medium">
+                      <div className="flex items-center gap-2 text-[12.5px] sm:text-[13.5px] text-stone-600 dark:text-stone-400 mt-1 font-medium">
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
                           {group.location}
@@ -289,7 +289,7 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                       </div>
                     </div>
                     <div className="flex items-center gap-3 sm:gap-4">
-                      <div className="text-xs font-semibold text-stone-800 dark:text-stone-200 font-mono bg-white dark:bg-[#161619] px-3.5 py-1.5 rounded-lg border border-stone-300 dark:border-stone-600 shadow-2xs">
+                      <div className="text-[12.5px] sm:text-[13.5px] font-semibold text-stone-800 dark:text-stone-200 font-mono bg-white dark:bg-[#161619] px-3.5 py-1 rounded-lg border border-stone-300 dark:border-stone-600 shadow-2xs">
                         {group.startYear} – {group.endYear === 'Present' ? <span className="text-blue-600 dark:text-blue-400 font-bold">Present</span> : group.endYear}
                       </div>
                       <div className="w-8 h-8 rounded-lg bg-white dark:bg-[#161619] border border-stone-300 dark:border-stone-600 hidden sm:flex items-center justify-center text-stone-500 dark:text-stone-400 group-hover/header:text-stone-900 dark:group-hover/header:text-white shadow-2xs transition-colors">
@@ -324,10 +324,10 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2.5 flex-wrap">
-                                  <h4 className="font-bold text-base text-stone-900 dark:text-stone-100 group-hover/milestone:text-blue-600 dark:group-hover/milestone:text-blue-400 transition-colors">
+                                  <h4 className="font-bold text-base sm:text-[17.5px] text-stone-900 dark:text-stone-100 group-hover/milestone:text-blue-600 dark:group-hover/milestone:text-blue-400 transition-colors">
                                     {node.role}
                                   </h4>
-                                  <div className="text-xs text-stone-600 dark:text-stone-300 font-mono font-medium flex items-center gap-1.5 bg-stone-100 dark:bg-[#232328] px-2.5 py-1 rounded-md border border-stone-200 dark:border-stone-700/80">
+                                  <div className="text-xs sm:text-[13.5px] text-stone-600 dark:text-stone-300 font-mono font-medium flex items-center gap-1.5 bg-stone-100 dark:bg-[#232328] px-2.5 py-0.5 rounded-md border border-stone-200 dark:border-stone-700/80">
                                     <Calendar className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
                                     {node.period.includes('Present') ? (
                                       <span>
@@ -360,85 +360,187 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                                 >
                                   <div className="pt-5 mt-4 border-t-2 border-stone-100 dark:border-stone-800/80">
                                     <div className="bg-stone-50/75 dark:bg-[#141416] p-4 sm:p-6 rounded-xl border border-stone-200/90 dark:border-stone-800/90 shadow-2xs">
-                                      <div className={`gap-6 ${node.imageUrl && node.imageLayout === 'landscape-top' ? 'flex flex-col' : 'grid grid-cols-1 lg:grid-cols-[1fr_minmax(200px,320px)]'}`}>
-                                        {node.imageUrl && node.imageLayout === 'landscape-top' && (
-                                          <div className="w-full h-48 sm:h-64 rounded-xl overflow-hidden border-2 border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 relative shadow-xs">
-                                            <img 
-                                              src={node.imageUrl} 
-                                              alt={node.role} 
-                                              className="absolute inset-0 w-full h-full object-cover object-center"
-                                              referrerPolicy="no-referrer"
-                                            />
-                                          </div>
-                                        )}
-
-                                        <div className={`space-y-4 ${node.imageUrl && node.imageLayout === 'landscape-top' ? '' : 'order-2 lg:order-1'}`}>
-                                          {/* Summary */}
-                                          {node.summary && (
-                                            <p className="text-sm text-stone-700 dark:text-stone-300 leading-relaxed font-normal">
-                                              {node.summary}
-                                            </p>
-                                          )}
-
-                                          {/* Decision Context for Pivots */}
-                                          {node.decisionContext && (
-                                            <div className="bg-white dark:bg-[#202025] p-3.5 rounded-lg border border-stone-200 dark:border-stone-700 space-y-1.5 shadow-2xs">
-                                              <span className="text-[10px] font-mono uppercase text-stone-500 dark:text-stone-400 font-semibold tracking-wider flex items-center gap-1.5">
-                                                <GitBranch className="w-3 h-3 text-stone-400" />
-                                                Context
-                                              </span>
-                                              <p className="text-stone-800 dark:text-stone-200 text-xs leading-relaxed">
-                                                {node.decisionContext}
-                                              </p>
+                                      {node.imageUrl ? (
+                                        node.imageLayout === 'landscape-top' ? (
+                                          /* Landscape top image layout: photo reduced by 50%, maintaining stock aspect ratio */
+                                          <div className="flex flex-col gap-5">
+                                            <div className="w-full max-w-md mx-auto h-28 sm:h-32 rounded-xl overflow-hidden border border-stone-200/90 dark:border-stone-700/80 bg-white/70 dark:bg-[#18181c] p-1.5 flex items-center justify-center shadow-2xs">
+                                              <img 
+                                                src={node.imageUrl} 
+                                                alt={node.role} 
+                                                className="h-full w-auto max-w-full object-contain rounded-lg"
+                                                referrerPolicy="no-referrer"
+                                              />
                                             </div>
-                                          )}
 
-                                          {/* Quantitative Metrics */}
-                                          {node.metrics && (
-                                            <div className="bg-stone-900 dark:bg-[#101012] text-stone-100 p-3.5 rounded-lg flex items-start gap-2.5 border border-stone-800 dark:border-stone-700/80 shadow-xs">
-                                              <TrendingUp className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
-                                              <div className="space-y-0.5">
-                                                <span className="text-[10px] font-mono text-stone-400 uppercase tracking-wider block font-semibold">Key Impact & Scale</span>
-                                                <p className="text-xs text-stone-200">{node.metrics}</p>
+                                            <div className="w-full max-w-3xl mx-auto flex flex-col justify-center space-y-3.5 py-1">
+                                              {/* Summary */}
+                                              {node.summary && (
+                                                <p className="text-[15px] sm:text-base text-stone-700 dark:text-stone-300 leading-relaxed font-normal">
+                                                  {node.summary}
+                                                </p>
+                                              )}
+
+                                              {/* Decision Context for Pivots */}
+                                              {node.decisionContext && (
+                                                <div className="bg-white dark:bg-[#202025] p-3 rounded-lg border border-stone-200 dark:border-stone-700 space-y-1 shadow-2xs">
+                                                  <span className="text-[11px] font-mono uppercase text-stone-500 dark:text-stone-400 font-semibold tracking-wider flex items-center gap-1.5">
+                                                    <GitBranch className="w-3 h-3 text-stone-400" />
+                                                    Context
+                                                  </span>
+                                                  <p className="text-stone-800 dark:text-stone-200 text-[13px] sm:text-[14.5px] leading-relaxed">
+                                                    {node.decisionContext}
+                                                  </p>
+                                                </div>
+                                              )}
+
+                                              {/* Quantitative Metrics */}
+                                              {node.metrics && (
+                                                <div className="bg-stone-900 dark:bg-[#101012] text-stone-100 p-3 rounded-lg flex items-start gap-2.5 border border-stone-800 dark:border-stone-700/80 shadow-xs">
+                                                  <TrendingUp className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+                                                  <div className="space-y-0.5">
+                                                    <span className="text-[11px] font-mono text-stone-400 uppercase tracking-wider block font-semibold">Key Impact & Scale</span>
+                                                    <p className="text-[13px] sm:text-[14.5px] text-stone-200">{node.metrics}</p>
+                                                  </div>
+                                                </div>
+                                              )}
+
+                                              {/* Bullet points format */}
+                                              {node.highlights && node.highlights.length > 0 && (
+                                                <ul className="space-y-2">
+                                                  {node.highlights.map((item, idx) => (
+                                                    <li key={idx} className="flex items-start gap-2.5 text-stone-700 dark:text-stone-200 leading-relaxed text-[15.5px] sm:text-[16.5px] font-normal">
+                                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 shrink-0" />
+                                                      <span>{item}</span>
+                                                    </li>
+                                                  ))}
+                                                </ul>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          /* Side-by-side layout: photo reduced by 50% while maintaining stock aspect ratio */
+                                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8 min-h-[180px]">
+                                            {/* Bullet points & content: centered in middle of card in desktop view */}
+                                            <div className="order-2 lg:order-1 flex-1 flex flex-col justify-center py-1">
+                                              <div className="w-full max-w-2xl lg:mx-auto space-y-3.5">
+                                                {/* Summary */}
+                                                {node.summary && (
+                                                  <p className="text-[15px] sm:text-base text-stone-700 dark:text-stone-300 leading-relaxed font-normal">
+                                                    {node.summary}
+                                                  </p>
+                                                )}
+
+                                                {/* Decision Context for Pivots */}
+                                                {node.decisionContext && (
+                                                  <div className="bg-white dark:bg-[#202025] p-3 rounded-lg border border-stone-200 dark:border-stone-700 space-y-1 shadow-2xs">
+                                                    <span className="text-[11px] font-mono uppercase text-stone-500 dark:text-stone-400 font-semibold tracking-wider flex items-center gap-1.5">
+                                                      <GitBranch className="w-3 h-3 text-stone-400" />
+                                                      Context
+                                                    </span>
+                                                    <p className="text-stone-800 dark:text-stone-200 text-[13px] sm:text-[14.5px] leading-relaxed">
+                                                      {node.decisionContext}
+                                                    </p>
+                                                  </div>
+                                                )}
+
+                                                {/* Quantitative Metrics */}
+                                                {node.metrics && (
+                                                  <div className="bg-stone-900 dark:bg-[#101012] text-stone-100 p-3 rounded-lg flex items-start gap-2.5 border border-stone-800 dark:border-stone-700/80 shadow-xs">
+                                                    <TrendingUp className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+                                                    <div className="space-y-0.5">
+                                                      <span className="text-[11px] font-mono text-stone-400 uppercase tracking-wider block font-semibold">Key Impact & Scale</span>
+                                                      <p className="text-[13px] sm:text-[14.5px] text-stone-200">{node.metrics}</p>
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {/* Bullet points format */}
+                                                {node.highlights && node.highlights.length > 0 && (
+                                                  <ul className="space-y-2">
+                                                    {node.highlights.map((item, idx) => (
+                                                      <li key={idx} className="flex items-start gap-2.5 text-stone-700 dark:text-stone-200 leading-relaxed text-[15.5px] sm:text-[16.5px] font-normal">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 shrink-0" />
+                                                        <span>{item}</span>
+                                                      </li>
+                                                    ))}
+                                                  </ul>
+                                                )}
                                               </div>
                                             </div>
-                                          )}
 
-                                          {/* Bullet points format */}
-                                          {node.highlights && node.highlights.length > 0 && (
-                                            <ul className="space-y-2.5">
-                                              {node.highlights.map((item, idx) => (
-                                                <li key={idx} className="flex items-start gap-3 text-stone-700 dark:text-stone-200 leading-relaxed text-sm">
-                                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 shrink-0" />
-                                                  <span>{item}</span>
-                                                </li>
-                                              ))}
-                                            </ul>
-                                          )}
-                                        </div>
-
-                                        {/* Optional Image (Portrait Right default) */}
-                                        {node.imageUrl && node.imageLayout !== 'landscape-top' && (
-                                          <div className="order-1 lg:order-2 w-full h-48 lg:h-full lg:min-h-[200px] rounded-xl overflow-hidden border-2 border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800 relative self-start shadow-xs">
-                                            <img 
-                                              src={node.imageUrl} 
-                                              alt={node.role} 
-                                              className="absolute inset-0 w-full h-full object-cover object-center"
-                                              referrerPolicy="no-referrer"
-                                            />
+                                            {/* Photo: reduced by 50% to a compact footprint with stock aspect ratio */}
+                                            <div className="order-1 lg:order-2 shrink-0 flex items-center justify-center self-center">
+                                              <div className="flex items-center justify-center rounded-xl overflow-hidden border border-stone-200/90 dark:border-stone-700/80 bg-white/70 dark:bg-[#18181c] p-1.5 sm:p-2 shadow-2xs">
+                                                <img 
+                                                  src={node.imageUrl} 
+                                                  alt={node.role} 
+                                                  className="w-auto max-h-24 sm:max-h-32 lg:max-h-[170px] max-w-[180px] sm:max-w-[220px] object-contain rounded-lg shadow-2xs"
+                                                  referrerPolicy="no-referrer"
+                                                />
+                                              </div>
+                                            </div>
                                           </div>
-                                        )}
-                                      </div>
+                                        )
+                                      ) : (
+                                        /* Card with NO photo: bullet points centered in middle of card in desktop view */
+                                        <div className="w-full max-w-3xl mx-auto flex flex-col justify-center py-1">
+                                          <div className="w-full space-y-3.5">
+                                            {/* Summary */}
+                                            {node.summary && (
+                                              <p className="text-[15px] sm:text-base text-stone-700 dark:text-stone-300 leading-relaxed font-normal">
+                                                {node.summary}
+                                              </p>
+                                            )}
+
+                                            {/* Decision Context for Pivots */}
+                                            {node.decisionContext && (
+                                              <div className="bg-white dark:bg-[#202025] p-3 rounded-lg border border-stone-200 dark:border-stone-700 space-y-1 shadow-2xs">
+                                                <span className="text-[11px] font-mono uppercase text-stone-500 dark:text-stone-400 font-semibold tracking-wider flex items-center gap-1.5">
+                                                  <GitBranch className="w-3 h-3 text-stone-400" />
+                                                  Context
+                                                </span>
+                                                <p className="text-stone-800 dark:text-stone-200 text-[13px] sm:text-[14.5px] leading-relaxed">
+                                                  {node.decisionContext}
+                                                </p>
+                                              </div>
+                                            )}
+
+                                            {/* Quantitative Metrics */}
+                                            {node.metrics && (
+                                              <div className="bg-stone-900 dark:bg-[#101012] text-stone-100 p-3 rounded-lg flex items-start gap-2.5 border border-stone-800 dark:border-stone-700/80 shadow-xs">
+                                                <TrendingUp className="w-3.5 h-3.5 text-blue-400 mt-0.5 shrink-0" />
+                                                <div className="space-y-0.5">
+                                                  <span className="text-[11px] font-mono text-stone-400 uppercase tracking-wider block font-semibold">Key Impact & Scale</span>
+                                                  <p className="text-[13px] sm:text-[14.5px] text-stone-200">{node.metrics}</p>
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Bullet points format */}
+                                            {node.highlights && node.highlights.length > 0 && (
+                                              <ul className="space-y-2">
+                                                {node.highlights.map((item, idx) => (
+                                                  <li key={idx} className="flex items-start gap-2.5 text-stone-700 dark:text-stone-200 leading-relaxed text-[15.5px] sm:text-[16.5px] font-normal">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 shrink-0" />
+                                                    <span>{item}</span>
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
 
                                       {/* Bottom Collapse Button */}
-                                      <div className="pt-4 mt-4 text-center border-t border-stone-200/80 dark:border-stone-800">
+                                      <div className="pt-3.5 mt-3.5 text-center border-t border-stone-200/80 dark:border-stone-800">
                                         <button
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             toggleExpand(node.id);
                                           }}
-                                          className="inline-flex items-center gap-1.5 text-xs text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white font-medium py-1.5 px-4 rounded-lg bg-white dark:bg-[#202025] border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors shadow-2xs cursor-pointer"
+                                          className="inline-flex items-center gap-1.5 text-xs sm:text-[13.5px] text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white font-medium py-1 px-3.5 rounded-lg bg-white dark:bg-[#202025] border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors shadow-2xs cursor-pointer"
                                         >
                                           <ChevronDown className="w-3.5 h-3.5 rotate-180" />
                                           <span>Collapse details</span>

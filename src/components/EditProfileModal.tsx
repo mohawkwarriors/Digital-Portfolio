@@ -1695,7 +1695,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                                   label="Milestone / Mechanism Photo (Optional)"
                                   value={role.imageUrl || ''}
                                   onChange={(url) => handleRoleChange(card.id, role.id, 'imageUrl', url)}
-                                  aspectRatio={role.imageLayout === 'landscape-top' ? 'wide' : 'square'}
+                                  aspectRatio="auto"
                                   helperText="Upload a photo of the product, test fixture, or CAD assembly."
                                 />
                               </div>

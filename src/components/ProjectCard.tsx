@@ -193,10 +193,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
             <div className="p-5 sm:p-6 space-y-6 bg-stone-50/40">
               {/* Description / Overview */}
               <div className="space-y-1.5">
-                <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500">
+                <h4 className="text-xs sm:text-[12.5px] font-mono uppercase tracking-wider text-stone-500 dark:text-stone-400 font-semibold">
                   Project Overview
                 </h4>
-                <p className="text-xs sm:text-sm text-stone-700 leading-relaxed">
+                <p className="text-[15px] sm:text-base text-stone-700 dark:text-stone-300 leading-relaxed font-normal">
                   {project.description}
                 </p>
               </div>
@@ -204,12 +204,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               {/* Key Highlights / Engineering Highlights */}
               {project.challengesSolved && project.challengesSolved.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
+                  <h4 className="text-xs sm:text-[12.5px] font-mono uppercase tracking-wider text-stone-500 dark:text-stone-400 font-semibold flex items-center gap-1.5">
                     <span>Key Engineering Highlights</span>
                   </h4>
                   <ul className="space-y-2">
                     {project.challengesSolved.map((bullet, bIdx) => (
-                      <li key={bIdx} className="flex items-start gap-2.5 text-xs sm:text-sm text-stone-700 dark:text-stone-300 leading-relaxed">
+                      <li key={bIdx} className="flex items-start gap-2.5 text-[15.5px] sm:text-[16.5px] text-stone-700 dark:text-stone-200 leading-relaxed font-normal">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400 mt-2 shrink-0" />
                         <span>{bullet}</span>
                       </li>
@@ -221,20 +221,20 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
               {/* Key Performance Specifications */}
               {project.metrics && project.metrics.length > 0 && (
                 <div className="space-y-2">
-                  <h4 className="text-[11px] font-mono uppercase tracking-wider text-stone-500 flex items-center gap-1.5">
-                    <TrendingUp className="w-3.5 h-3.5 text-stone-600" />
+                  <h4 className="text-xs sm:text-[12.5px] font-mono uppercase tracking-wider text-stone-500 dark:text-stone-400 font-semibold flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
                     <span>Key Performance Specifications</span>
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                     {project.metrics.map((m, idx) => (
                       <div
                         key={idx}
-                        className="p-2.5 rounded-xl bg-white border border-stone-200 shadow-2xs text-center flex flex-col justify-center min-h-[58px]"
+                        className="p-2.5 rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 shadow-2xs text-center flex flex-col justify-center min-h-[58px]"
                       >
-                        <div className="text-xs sm:text-sm font-mono font-bold text-stone-900 break-words leading-tight">
+                        <div className="text-sm sm:text-base font-mono font-bold text-stone-900 dark:text-stone-100 break-words leading-tight">
                           {m.value || '—'}
                         </div>
-                        <div className="text-[10.5px] text-stone-600 mt-1 leading-snug break-words">
+                        <div className="text-xs sm:text-[12.5px] text-stone-600 dark:text-stone-400 mt-1 leading-snug break-words">
                           {m.label || 'Specification'}
                         </div>
                       </div>
@@ -249,7 +249,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 if (links.length === 0) return null;
 
                 return (
-                  <div className="pt-2 border-t border-stone-200">
+                  <div className="pt-2 border-t border-stone-200 dark:border-stone-800">
                     <div className="flex flex-wrap items-center gap-2 pt-2">
                       {links.map((link, lIdx) => {
                         const lowerLabel = link.label.toLowerCase();
@@ -265,17 +265,17 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                             target="_blank"
                             rel="noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 text-xs font-medium border border-stone-200/80 transition-colors shadow-2xs group/link"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white text-xs sm:text-[13.5px] font-medium border border-stone-200/80 dark:border-stone-700 transition-colors shadow-2xs group/link"
                           >
                             {isGithub ? (
-                              <Github className="w-3.5 h-3.5 text-stone-700" />
+                              <Github className="w-3.5 h-3.5 text-stone-700 dark:text-stone-300" />
                             ) : isDoc ? (
-                              <FileText className="w-3.5 h-3.5 text-stone-600" />
+                              <FileText className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
                             ) : (
-                              <Globe className="w-3.5 h-3.5 text-stone-600" />
+                              <Globe className="w-3.5 h-3.5 text-stone-600 dark:text-stone-400" />
                             )}
                             <span>{link.label}</span>
-                            <ExternalLink className="w-3 h-3 text-stone-400 group-hover/link:text-stone-700 transition-colors" />
+                            <ExternalLink className="w-3 h-3 text-stone-400 group-hover/link:text-stone-700 dark:group-hover/link:text-white transition-colors" />
                           </a>
                         );
                       })}
@@ -289,7 +289,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
                 <button
                   type="button"
                   onClick={handleToggleCard}
-                  className="inline-flex items-center gap-1 text-xs text-stone-500 hover:text-stone-900 font-medium py-1 px-3 rounded-lg hover:bg-stone-200/60 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs sm:text-[13.5px] text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white font-medium py-1 px-3 rounded-lg hover:bg-stone-200/60 dark:hover:bg-stone-800 transition-colors"
                 >
                   <ChevronUp className="w-3.5 h-3.5" />
                   <span>Collapse card</span>

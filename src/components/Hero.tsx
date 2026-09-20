@@ -53,6 +53,71 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
               <h1 id="hero-name-heading" className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-stone-900 dark:text-stone-50">
                 {profile.name}
               </h1>
+
+              {/* Mobile View: Picture, Resume, GitHub, and LinkedIn links under name */}
+              <div className="block md:hidden pt-2 pb-1">
+                <div className="flex flex-row items-center gap-3.5 sm:gap-5 w-full">
+                  {/* Headshot */}
+                  <div className="relative w-36 h-36 min-[375px]:w-40 min-[375px]:h-40 sm:w-48 sm:h-48 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-800 shadow-sm bg-stone-100 dark:bg-stone-900 shrink-0">
+                    <img 
+                      src={profile.avatarUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=800&auto=format&fit=crop"} 
+                      alt={profile.name} 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 ring-1 ring-inset ring-black/10 dark:ring-white/10 rounded-2xl"></div>
+                  </div>
+
+                  {/* Links & Contact: Total height precisely matches profile image */}
+                  <div className="h-36 min-[375px]:h-40 sm:h-48 flex-1 min-w-0 max-w-[155px] min-[375px]:max-w-[172px] sm:max-w-[195px] flex flex-col gap-2 sm:gap-2.5 justify-between shrink-0">
+                    {/* Resume Button: Fills remaining gap to match image height */}
+                    <button 
+                      type="button"
+                      id="hero-resume-btn-mobile"
+                      onClick={() => {
+                        if (onOpenResume) {
+                          onOpenResume();
+                        } else if (profile.resumeUrl) {
+                          window.open(profile.resumeUrl, '_blank');
+                        }
+                      }}
+                      className="w-full flex-1 inline-flex items-center justify-center gap-2 px-3 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-2xl text-xs sm:text-sm font-semibold hover:bg-stone-800 dark:hover:bg-stone-200 transition-colors shadow-2xs cursor-pointer whitespace-nowrap active:scale-98"
+                    >
+                      <FileText className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                      <span>Resume</span>
+                    </button>
+
+                    {/* Square Icon-Only Buttons for GitHub & LinkedIn */}
+                    <div className="grid grid-cols-2 gap-2 sm:gap-2.5 shrink-0">
+                      <a 
+                        href={profile.github} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        id="hero-github-link-mobile"
+                        aria-label="GitHub Profile"
+                        title="GitHub Profile"
+                        className="aspect-square w-full inline-flex items-center justify-center bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 rounded-2xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors shadow-2xs active:scale-98"
+                      >
+                        <Github className="w-5 h-5 sm:w-5.5 sm:h-5.5 shrink-0" />
+                      </a>
+                      
+                      <a 
+                        href={profile.linkedin} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        id="hero-linkedin-link-mobile"
+                        aria-label="LinkedIn Profile"
+                        title="LinkedIn Profile"
+                        className="aspect-square w-full inline-flex items-center justify-center bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 rounded-2xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors shadow-2xs active:scale-98"
+                      >
+                        <Linkedin className="w-5 h-5 sm:w-5.5 sm:h-5.5 shrink-0" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tagline & Bio: Positioned after picture and links on mobile */}
               <p id="hero-title-subheading" className="text-xl sm:text-2xl text-stone-600 dark:text-stone-400 font-medium tracking-tight">
                 {profile.title} <span className="text-stone-300 dark:text-stone-700 mx-2">|</span> {profile.tagline}
               </p>
@@ -62,11 +127,11 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
             </div>
           </div>
           
-          <div className="md:col-span-4 flex flex-col items-start md:items-end">
-            {/* Mobile: Larger headshot side-by-side with balanced touch buttons; Desktop: Full stacked */}
-            <div className="flex flex-row md:flex-col items-center md:items-end gap-4 sm:gap-6 md:gap-5 w-full md:w-auto">
+          {/* Desktop View: Headshot and links in right column */}
+          <div className="hidden md:flex md:col-span-4 flex-col items-end">
+            <div className="flex flex-col items-end gap-5 w-auto">
               {/* Headshot */}
-              <div className="relative w-40 h-40 min-[375px]:w-44 min-[375px]:h-44 sm:w-52 sm:h-52 md:w-64 md:h-64 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-800 shadow-sm bg-stone-100 dark:bg-stone-900 shrink-0">
+              <div className="relative w-64 h-64 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-800 shadow-sm bg-stone-100 dark:bg-stone-900 shrink-0">
                 <img 
                   src={profile.avatarUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=800&auto=format&fit=crop"} 
                   alt={profile.name} 
@@ -76,12 +141,12 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
                 <div className="absolute inset-0 ring-1 ring-inset ring-black/10 dark:ring-white/10 rounded-2xl"></div>
               </div>
 
-              {/* Links & Contact: Ergonomic touch-target buttons, balanced spacing */}
+              {/* Links & Contact */}
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                className="flex-1 max-w-[140px] sm:max-w-[160px] md:max-w-none md:w-64 flex flex-col gap-2.5 sm:gap-3 justify-center shrink-0"
+                className="w-64 flex flex-col gap-3 justify-center shrink-0"
               >
                 <button 
                   type="button"
@@ -93,13 +158,13 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
                       window.open(profile.resumeUrl, '_blank');
                     }
                   }}
-                  className="w-full h-11 inline-flex items-center justify-center gap-2 px-3 md:px-4 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-xl text-xs md:text-sm font-medium hover:bg-stone-800 dark:hover:bg-stone-200 transition-colors shadow-2xs cursor-pointer whitespace-nowrap active:scale-98"
+                  className="w-full h-11 inline-flex items-center justify-center gap-2 px-4 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 rounded-xl text-sm font-medium hover:bg-stone-800 dark:hover:bg-stone-200 transition-colors shadow-2xs cursor-pointer whitespace-nowrap active:scale-98"
                 >
                   <FileText className="w-4 h-4 shrink-0" />
                   <span>Resume</span>
                 </button>
 
-                <div className="grid grid-cols-2 gap-2 sm:gap-2.5 md:gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <a 
                     href={profile.github} 
                     target="_blank" 
@@ -107,10 +172,10 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
                     id="hero-github-link"
                     aria-label="GitHub Profile"
                     title="GitHub Profile"
-                    className="h-11 inline-flex items-center justify-center gap-2 px-2.5 md:px-4 bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 rounded-xl text-xs md:text-sm font-medium hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors shadow-2xs active:scale-98"
+                    className="h-11 inline-flex items-center justify-center gap-2 px-4 bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 rounded-xl text-sm font-medium hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors shadow-2xs active:scale-98"
                   >
                     <Github className="w-4 h-4 shrink-0" />
-                    <span className="hidden md:inline">GitHub</span>
+                    <span>GitHub</span>
                   </a>
                   
                   <a 
@@ -120,10 +185,10 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
                     id="hero-linkedin-link"
                     aria-label="LinkedIn Profile"
                     title="LinkedIn Profile"
-                    className="h-11 inline-flex items-center justify-center gap-2 px-2.5 md:px-4 bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 rounded-xl text-xs md:text-sm font-medium hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors shadow-2xs active:scale-98"
+                    className="h-11 inline-flex items-center justify-center gap-2 px-4 bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 rounded-xl text-sm font-medium hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors shadow-2xs active:scale-98"
                   >
                     <Linkedin className="w-4 h-4 shrink-0" />
-                    <span className="hidden md:inline">LinkedIn</span>
+                    <span>LinkedIn</span>
                   </a>
                 </div>
               </motion.div>

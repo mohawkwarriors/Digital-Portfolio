@@ -64,8 +64,8 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   const hasImage = Boolean(value && value.trim().length > 0);
 
   const aspectClass = 
-    aspectRatio === 'square' ? 'aspect-square max-w-[120px]' :
-    aspectRatio === 'wide' ? 'aspect-16/9 max-h-[160px]' : 'min-h-[90px]';
+    aspectRatio === 'square' ? 'aspect-square max-w-[120px] object-cover' :
+    aspectRatio === 'wide' ? 'aspect-16/9 max-h-[160px] object-cover' : 'min-h-[90px] max-h-[220px] w-auto max-w-full object-contain';
 
   return (
     <div className={`space-y-1.5 ${className}`}>
@@ -124,7 +124,7 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           <img
             src={value}
             alt={label}
-            className={`w-full object-cover rounded-xl ${aspectClass}`}
+            className={`rounded-xl ${aspectClass}`}
             onError={(e) => {
               // Fallback styling if image link fails
               (e.target as HTMLElement).style.opacity = '0.5';

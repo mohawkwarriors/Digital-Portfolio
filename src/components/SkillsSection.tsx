@@ -27,7 +27,7 @@ export const SkillsSection: React.FC<SkillsSectionProps> = ({ skills }) => {
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           className="space-y-1.5"
         >
-          <h2 id="skills-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900">
+          <h2 id="skills-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
             Skills
           </h2>
         </motion.div>
@@ -44,25 +44,25 @@ export const SkillsSection: React.FC<SkillsSectionProps> = ({ skills }) => {
                 viewport={{ once: true, margin: '-30px' }}
                 whileHover={{ y: -2, transition: { duration: 0.2 } }}
                 transition={{ duration: 0.35, delay: catIdx * 0.06, ease: [0.16, 1, 0.3, 1] }}
-                className="bg-stone-50 dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 p-4 shadow-sm hover:shadow-lg hover:shadow-stone-200/50 dark:hover:shadow-black/50 hover:border-stone-300 transition-all duration-300 space-y-3 group"
+                className="bg-stone-50 dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 p-4 sm:p-5 shadow-sm hover:shadow-lg hover:shadow-stone-200/50 dark:hover:shadow-black/50 hover:border-stone-300 dark:hover:border-stone-600 transition-all duration-300 space-y-3.5 group"
               >
-                <div className="flex items-center gap-2 pb-2.5 border-b border-stone-100">
-                  <div className="w-6 h-6 rounded-md bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-600 group-hover:border-orange-400 group-hover:text-orange-500 transition-colors">
-                    <Icon className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-2 pb-2.5 border-b border-stone-100 dark:border-stone-800">
+                  <div className="w-7 h-7 rounded-lg bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center text-stone-600 dark:text-stone-300 group-hover:border-blue-400 group-hover:text-blue-500 transition-colors">
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <h3 className="text-xs font-semibold text-stone-900 tracking-tight">
+                  <h3 className="text-sm sm:text-base font-semibold text-stone-900 dark:text-stone-100 tracking-tight">
                     {category.name}
                   </h3>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {category.skills.map((skill) => (
                     <span
                       key={skill.name}
-                      className={`px-2 py-1 rounded-md text-[11px] leading-tight border transition-all ${
+                      className={`px-3 py-1.5 rounded-lg text-xs sm:text-[13.5px] font-medium leading-snug border transition-all ${
                         skill.highlighted
-                          ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400 font-medium shadow-2xs'
-                          : 'bg-stone-50/60 border-stone-200/80 text-stone-600 hover:bg-stone-100/80 hover:text-stone-900'
+                          ? 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400 font-semibold shadow-2xs'
+                          : 'bg-white/80 dark:bg-stone-800/80 border-stone-200/80 dark:border-stone-700/80 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100'
                       }`}
                     >
                       {skill.name}
