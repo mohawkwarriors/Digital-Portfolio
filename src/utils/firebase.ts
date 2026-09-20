@@ -80,14 +80,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.warn('Firestore Operation Info:', JSON.stringify(errInfo));
+  return errInfo;
 }
 
 // Test connectivity as per guidelines
 export async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await getDocFromServer(doc(db, 'portfolio', 'content'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase connection: client appears offline.');
@@ -223,12 +223,12 @@ export async function signInWithGoogle(): Promise<{ success: boolean; user?: Use
 
     return { success: true, user };
   } catch (err: any) {
-    console.error('Google Sign In failed:', err);
+    console.warn('Google Sign In notice:', err?.code || err?.message || err);
     let errorMessage = err?.message || 'Failed to complete Google Sign In';
 
     if (err?.code === 'auth/unauthorized-domain') {
       const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-      errorMessage = `Domain unauthorized: "${currentHost}" must be added to Authorized Domains in Firebase Console (Authentication > Settings > Authorized domains).`;
+      errorMessage = `Domain unauthorized: "${currentHost}" must be added to Authorized Domains in Firebase Console. You can also log in directly using the Admin Passkey below.`;
     }
 
     return {

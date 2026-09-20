@@ -85,6 +85,28 @@ export function isLocalSessionValid(): boolean {
 }
 
 /**
+ * Authenticates against the backend using the Admin Passkey
+ */
+export async function loginWithPasskey(passkey: string): Promise<LoginResult> {
+  try {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passkey: passkey.trim() })
+    });
+
+    const data = await res.json();
+    if (data.success && data.token) {
+      saveSession(data.token, data.email || AUTHORIZED_OWNER_EMAIL, data.expiresAt || (Date.now() + 7 * 24 * 3600 * 1000));
+      return { success: true };
+    }
+    return { success: false, message: data.message || 'Incorrect passkey.' };
+  } catch (err: any) {
+    return { success: false, message: 'Network error communicating with authentication service.' };
+  }
+}
+
+/**
  * Syncs a Firebase ID token into local session storage
  */
 export function syncFirebaseSession(idToken: string, email: string = AUTHORIZED_OWNER_EMAIL) {

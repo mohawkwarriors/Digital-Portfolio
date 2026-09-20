@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, ShieldCheck, AlertCircle, X, Sparkles, Check } from 'lucide-react';
-import { syncFirebaseSession, AUTHORIZED_OWNER_EMAIL } from '../utils/authClient';
+import { Lock, ShieldCheck, AlertCircle, X, Sparkles, Check, Key, Copy } from 'lucide-react';
+import { syncFirebaseSession, loginWithPasskey, AUTHORIZED_OWNER_EMAIL } from '../utils/authClient';
 import { signInWithGoogle } from '../utils/firebase';
 
 export { AUTHORIZED_OWNER_EMAIL };
@@ -15,16 +15,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [error, setError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showPasskey, setShowPasskey] = useState(false);
+  const [passkey, setPasskey] = useState('');
+  const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
+  const [copiedHost, setCopiedHost] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setError(null);
       setIsSuccess(false);
       setIsGoogleLoading(false);
+      setIsPasskeyLoading(false);
+      setPasskey('');
+      setCopiedHost(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+
+  const handleCopyHost = () => {
+    if (currentHost) {
+      navigator.clipboard.writeText(currentHost);
+      setCopiedHost(true);
+      setTimeout(() => setCopiedHost(false), 2000);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     if (isGoogleLoading || isSuccess) return;
@@ -50,11 +67,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         }, 400);
       } else {
         setError(res.error || 'Google Sign-In was cancelled or failed.');
+        if (res.error?.includes('Domain unauthorized')) {
+          setShowPasskey(true);
+        }
       }
     } catch (err: any) {
       setError(err?.message || 'Google Sign-In authentication error.');
     } finally {
       setIsGoogleLoading(false);
+    }
+  };
+
+  const handlePasskeySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passkey.trim() || isPasskeyLoading) return;
+    setError(null);
+    setIsPasskeyLoading(true);
+
+    try {
+      const res = await loginWithPasskey(passkey.trim());
+      if (res.success) {
+        setIsSuccess(true);
+        setTimeout(() => {
+          setIsSuccess(false);
+          onSuccess();
+        }, 400);
+      } else {
+        setError(res.message || 'Invalid passkey.');
+      }
+    } catch (err: any) {
+      setError('Error authenticating with passkey.');
+    } finally {
+      setIsPasskeyLoading(false);
     }
   };
 
@@ -80,7 +124,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 Admin Login
               </h3>
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                Sign in with Google to continue
+                Authenticate to manage portfolio content
               </p>
             </div>
           </div>
@@ -99,8 +143,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         {error && (
           <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
+            <div className="space-y-1.5 leading-relaxed">
               <span>{error}</span>
+              {currentHost && (
+                <div className="pt-1 flex items-center gap-2">
+                  <span className="font-mono text-[10px] bg-red-100 dark:bg-red-900/50 px-1.5 py-0.5 rounded text-red-800 dark:text-red-200 truncate max-w-[200px]">
+                    {currentHost}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyHost}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-red-700 dark:text-red-300 hover:underline cursor-pointer"
+                  >
+                    {copiedHost ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    {copiedHost ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -113,14 +172,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </div>
         )}
 
-        {/* Exclusive Google Sign-In CTA */}
+        {/* Authentication Options */}
         <div className="space-y-3 pt-1">
           <button
             type="button"
             id="google-sign-in-btn"
             onClick={handleGoogleSignIn}
             disabled={isGoogleLoading || isSuccess}
-            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-900 text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-60"
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-900 text-white hover:bg-stone-800 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-60"
           >
             {isGoogleLoading ? (
               <span className="flex items-center gap-2">
@@ -157,16 +216,65 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             )}
           </button>
 
-          <p className="text-[11px] text-stone-500 dark:text-stone-400 text-center leading-relaxed">
-            Please sign in with an authorized Google account to continue.
-          </p>
+          {/* Passkey Fallback Section */}
+          <div className="pt-2">
+            {!showPasskey ? (
+              <button
+                type="button"
+                id="toggle-passkey-btn"
+                onClick={() => setShowPasskey(true)}
+                className="w-full text-center text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200 transition-colors py-1 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Key className="w-3 h-3" />
+                <span>Or log in with Admin Passkey</span>
+              </button>
+            ) : (
+              <form onSubmit={handlePasskeySubmit} className="space-y-2.5 pt-2 border-t border-stone-100 dark:border-stone-800">
+                <div className="flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400">
+                  <span className="font-medium flex items-center gap-1">
+                    <Key className="w-3 h-3" />
+                    Admin Passkey
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPasskey(false)}
+                    className="text-[10px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 cursor-pointer"
+                  >
+                    Hide
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    id="admin-passkey-input"
+                    value={passkey}
+                    onChange={(e) => setPasskey(e.target.value)}
+                    placeholder="Enter passkey..."
+                    autoFocus
+                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 focus:outline-hidden focus:ring-1 focus:ring-stone-400"
+                  />
+                  <button
+                    type="submit"
+                    id="submit-passkey-btn"
+                    disabled={isPasskeyLoading || !passkey.trim()}
+                    className="px-3 py-2 rounded-xl bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-semibold hover:bg-stone-800 dark:hover:bg-stone-200 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isPasskeyLoading ? '...' : 'Unlock'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-stone-400 dark:text-stone-500">
+                  Passkey allows instant access on any domain without Google OAuth whitelisting.
+                </p>
+              </form>
+            )}
+          </div>
         </div>
 
         {/* Security badge footer */}
         <div className="pt-2 border-t border-stone-100 dark:border-stone-800 text-center">
           <p className="text-[10px] text-stone-400 font-mono flex items-center justify-center gap-1.5">
             <ShieldCheck className="w-3 h-3 text-emerald-500" />
-            <span>Secure OAuth 2.0 Authentication</span>
+            <span>Secure Admin Authentication</span>
           </p>
         </div>
       </div>

@@ -26,7 +26,11 @@ import {
   ArrowDown,
   FileText,
   FileCheck,
-  ExternalLink
+  ExternalLink,
+  Database,
+  AlertCircle,
+  History,
+  FileJson
 } from 'lucide-react';
 import { Profile, ExperienceFlowNode, Project, SkillCategory, SectionConfig } from '../types';
 import { AUTHORIZED_OWNER_EMAIL } from './AuthModal';
@@ -34,6 +38,24 @@ import { saveResumePdf, getResumePdf, clearResumePdf, StoredPdfRecord } from '..
 import { ImageUploadField } from './ImageUploadField';
 import { MultiImageGalleryUpload } from './MultiImageGalleryUpload';
 import { normalizeProjectLinks } from '../utils/projectLinks';
+
+export interface LocalSnapshot {
+  id: string;
+  timestamp: number;
+  label: string;
+  itemCounts?: {
+    projects: number;
+    experiences: number;
+    skills: number;
+  };
+  data: {
+    profile: Profile;
+    experienceNodes: ExperienceFlowNode[];
+    projects: Project[];
+    skills: SkillCategory[];
+    sections: SectionConfig[];
+  };
+}
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -44,7 +66,7 @@ interface EditProfileModalProps {
   skills: SkillCategory[];
   sections: SectionConfig[];
   onSave: (data: { profile: Profile; experienceNodes: ExperienceFlowNode[]; projects: Project[]; skills: SkillCategory[]; sections: SectionConfig[] }) => void;
-  onReset: () => void;
+  onReset?: () => void;
 }
 
 interface RoleItem {
@@ -157,7 +179,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   onSave,
   onReset
 }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'experience' | 'projects' | 'skills' | 'layout'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'experience' | 'projects' | 'skills' | 'layout' | 'backup'>('profile');
   const [editedProfile, setEditedProfile] = useState<Profile>({ ...profile });
   const [experienceCards, setExperienceCards] = useState<ExperienceCard[]>(() => groupNodesIntoCards(experienceNodes));
   const [editedProjects, setEditedProjects] = useState<Project[]>(() =>
@@ -175,6 +197,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [copiedFeedback, setCopiedFeedback] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [localSnapshots, setLocalSnapshots] = useState<LocalSnapshot[]>(() => {
+    try {
+      const saved = localStorage.getItem('portfolio_backup_snapshots');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [manualJsonInput, setManualJsonInput] = useState('');
+  const [showManualJson, setShowManualJson] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -270,13 +303,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         liveUrlLabel: liveLink ? liveLink.label : p.liveUrlLabel || ''
       };
     });
-    onSave({
+    const finalData = {
       profile: editedProfile,
       experienceNodes: finalExperienceNodes,
       projects: finalProjects,
       skills: editedSkills,
       sections: editedSections
-    });
+    };
+    onSave(finalData);
+    saveSnapshotToStorage('Manual Save in Editor', finalData);
     setSavedFeedback(true);
     setTimeout(() => {
       setSavedFeedback(false);
@@ -669,23 +704,188 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setEditedSkills(newSkills);
   };
 
-  const handleExportJSON = () => {
-    const finalExperienceNodes = flattenCardsToNodes(experienceCards);
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(
-      JSON.stringify({ 
-        profile: editedProfile, 
-        experienceNodes: finalExperienceNodes, 
-        projects: editedProjects,
-        skills: editedSkills,
-        sections: editedSections
-      }, null, 2)
-    );
+  const saveSnapshotToStorage = (label: string, dataToSave: any) => {
+    try {
+      const existingStr = localStorage.getItem('portfolio_backup_snapshots');
+      const existing: LocalSnapshot[] = existingStr ? JSON.parse(existingStr) : [];
+      const newSnapshot: LocalSnapshot = {
+        id: `snap-${Date.now()}`,
+        timestamp: Date.now(),
+        label,
+        itemCounts: {
+          projects: dataToSave.projects?.length || 0,
+          experiences: dataToSave.experienceNodes?.length || 0,
+          skills: dataToSave.skills?.length || 0
+        },
+        data: dataToSave
+      };
+      // Keep up to 10 snapshots and avoid duplicates within 2 seconds
+      const updated = [newSnapshot, ...existing.filter(s => Math.abs(s.timestamp - newSnapshot.timestamp) > 2000)].slice(0, 10);
+      localStorage.setItem('portfolio_backup_snapshots', JSON.stringify(updated));
+      setLocalSnapshots(updated);
+    } catch (_) {}
+  };
+
+  const applyBackupData = (parsed: any, sourceLabel: string) => {
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Invalid backup file. Expected a JSON object.');
+    }
+
+    // Support both root data and wrapped data
+    const backupData = parsed.data && typeof parsed.data === 'object' && (parsed.data.profile || parsed.data.projects)
+      ? parsed.data 
+      : parsed;
+
+    const hasProfile = backupData.profile && typeof backupData.profile === 'object';
+    const hasNodes = Array.isArray(backupData.experienceNodes);
+    const hasProjects = Array.isArray(backupData.projects);
+    const hasSkills = Array.isArray(backupData.skills);
+
+    if (!hasProfile && !hasNodes && !hasProjects && !hasSkills) {
+      throw new Error('Invalid portfolio backup file. Missing profile, projects, or experience timeline.');
+    }
+
+    if (hasProfile) {
+      setEditedProfile((prev) => ({
+        ...prev,
+        ...backupData.profile,
+        stats: backupData.profile.stats || prev.stats
+      }));
+    }
+
+    if (hasNodes) {
+      setExperienceCards(groupNodesIntoCards(backupData.experienceNodes));
+    }
+
+    if (hasProjects) {
+      setEditedProjects(
+        backupData.projects.map((p: Project) => ({
+          ...p,
+          links: normalizeProjectLinks(p)
+        }))
+      );
+    }
+
+    if (hasSkills) {
+      setEditedSkills(backupData.skills);
+    }
+
+    if (Array.isArray(backupData.sections)) {
+      setEditedSections(backupData.sections);
+    }
+
+    const restoredPayload = {
+      profile: hasProfile ? backupData.profile : editedProfile,
+      experienceNodes: hasNodes ? backupData.experienceNodes : flattenCardsToNodes(experienceCards),
+      projects: hasProjects ? backupData.projects : editedProjects,
+      skills: hasSkills ? backupData.skills : editedSkills,
+      sections: Array.isArray(backupData.sections) ? backupData.sections : editedSections
+    };
+
+    saveSnapshotToStorage(sourceLabel, restoredPayload);
+
+    setBackupStatus({
+      type: 'success',
+      text: `Backup restored successfully (${sourceLabel})! Review your changes and click "Save Changes" to publish.`
+    });
+    setTimeout(() => setBackupStatus(null), 6000);
+  };
+
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        applyBackupData(parsed, `Imported file: ${file.name}`);
+      } catch (err: any) {
+        setBackupStatus({
+          type: 'error',
+          text: err?.message || 'Failed to read backup file. Please select a valid JSON backup file.'
+        });
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleRestoreSnapshot = (snapshot: LocalSnapshot) => {
+    if (confirm(`Restore snapshot "${snapshot.label}" created on ${new Date(snapshot.timestamp).toLocaleString()}?`)) {
+      try {
+        applyBackupData(snapshot.data, `Snapshot: ${snapshot.label}`);
+      } catch (err: any) {
+        setBackupStatus({ type: 'error', text: err?.message || 'Failed to restore snapshot.' });
+      }
+    }
+  };
+
+  const handleDeleteSnapshot = (id: string) => {
+    const updated = localSnapshots.filter(s => s.id !== id);
+    setLocalSnapshots(updated);
+    try {
+      localStorage.setItem('portfolio_backup_snapshots', JSON.stringify(updated));
+    } catch (_) {}
+  };
+
+  const handleDownloadSnapshot = (snapshot: LocalSnapshot) => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(snapshot.data, null, 2));
     const downloadAnchor = document.createElement('a');
+    const dateStr = new Date(snapshot.timestamp).toISOString().slice(0, 10);
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `portfolio-data-${Date.now()}.json`);
+    downloadAnchor.setAttribute('download', `portfolio-snapshot-${dateStr}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+  };
+
+  const handleApplyManualJson = () => {
+    if (!manualJsonInput.trim()) return;
+    try {
+      const parsed = JSON.parse(manualJsonInput);
+      applyBackupData(parsed, 'Direct JSON paste');
+      setManualJsonInput('');
+      setShowManualJson(false);
+    } catch (err: any) {
+      setBackupStatus({
+        type: 'error',
+        text: `JSON Parse Error: ${err?.message || 'Invalid JSON format'}`
+      });
+    }
+  };
+
+  const handleExportJSON = () => {
+    const finalExperienceNodes = flattenCardsToNodes(experienceCards);
+    const backupPayload = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      author: editedProfile.name,
+      ownerEmail: AUTHORIZED_OWNER_EMAIL,
+      profile: editedProfile,
+      experienceNodes: finalExperienceNodes,
+      projects: editedProjects,
+      skills: editedSkills,
+      sections: editedSections
+    };
+
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(
+      JSON.stringify(backupPayload, null, 2)
+    );
+    const downloadAnchor = document.createElement('a');
+    const safeName = (editedProfile.name || 'portfolio').toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${safeName}-portfolio-backup-${dateStr}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+
+    saveSnapshotToStorage('Manual Backup Exported', backupPayload);
+    setBackupStatus({ type: 'success', text: 'Backup file downloaded successfully!' });
+    setTimeout(() => setBackupStatus(null), 4000);
   };
 
   const handleCopyJSON = () => {
@@ -885,6 +1085,19 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <LayoutList className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Sections</span>
             <span className="sm:hidden">Sect.</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('backup')}
+            className={`py-2.5 px-3 border-b-2 flex items-center gap-2 transition-colors ${
+              activeTab === 'backup'
+                ? 'border-stone-900 text-stone-900 font-semibold'
+                : 'border-transparent text-stone-500 hover:text-stone-900'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Backup & Restore</span>
+            <span className="sm:hidden">Backup</span>
           </button>
         </div>
 
@@ -2476,36 +2689,314 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* BACKUP & RESTORE TAB */}
+          {activeTab === 'backup' && (
+            <div className="space-y-6 text-xs sm:text-sm">
+              {/* Notification / Feedback Banner */}
+              {backupStatus && (
+                <div className={`p-3.5 rounded-xl border flex items-start justify-between gap-3 text-xs ${
+                  backupStatus.type === 'success' 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : backupStatus.type === 'error'
+                    ? 'bg-red-50 border-red-200 text-red-800'
+                    : 'bg-blue-50 border-blue-200 text-blue-800'
+                }`}>
+                  <div className="flex items-start gap-2.5">
+                    {backupStatus.type === 'success' ? (
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    )}
+                    <p className="leading-relaxed font-medium">{backupStatus.text}</p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setBackupStatus(null)} 
+                    className="text-stone-400 hover:text-stone-700 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Action Cards: Export & Import */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Export Card */}
+                <div className="p-5 rounded-2xl border border-stone-200 bg-stone-50/50 flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-stone-900 font-semibold text-sm">
+                      <div className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-700">
+                        <Download className="w-4 h-4" />
+                      </div>
+                      <h3>Backup Portfolio Data</h3>
+                    </div>
+                    <p className="text-xs text-stone-600 leading-relaxed">
+                      Download a complete, portable JSON file containing all your profile info, work experience timeline, project descriptions, skills, and section settings.
+                    </p>
+
+                    <div className="pt-2 flex flex-wrap gap-1.5 text-[11px] font-mono text-stone-600">
+                      <span className="px-2 py-0.5 bg-white rounded-md border border-stone-200">
+                        {experienceCards.length} companies
+                      </span>
+                      <span className="px-2 py-0.5 bg-white rounded-md border border-stone-200">
+                        {editedProjects.length} projects
+                      </span>
+                      <span className="px-2 py-0.5 bg-white rounded-md border border-stone-200">
+                        {editedSkills.length} skill groups
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      id="export-backup-btn"
+                      onClick={handleExportJSON}
+                      className="flex-1 inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Backup (.json)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyJSON}
+                      className="p-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 transition-colors cursor-pointer"
+                      title="Copy JSON to clipboard"
+                    >
+                      {copiedFeedback ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Import / Restore Card */}
+                <div className="p-5 rounded-2xl border border-stone-200 bg-stone-50/50 flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-stone-900 font-semibold text-sm">
+                      <div className="p-1.5 rounded-lg bg-white border border-stone-200 text-stone-700">
+                        <Upload className="w-4 h-4" />
+                      </div>
+                      <h3>Restore from Backup</h3>
+                    </div>
+                    <p className="text-xs text-stone-600 leading-relaxed">
+                      Select any previously exported portfolio JSON file to instantly restore your data. Restored content loads into the editor so you can review before clicking Save.
+                    </p>
+                    <p className="text-[11px] text-stone-500 italic pt-1">
+                      Tip: A local copy of your current data will also be kept in the snapshot history below.
+                    </p>
+                  </div>
+
+                  <div className="pt-1">
+                    <label 
+                      htmlFor="import-backup-file-input"
+                      className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border-2 border-dashed border-stone-300 hover:border-stone-400 bg-white hover:bg-stone-50 text-stone-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-stone-600" />
+                      <span>Select Backup File to Restore</span>
+                      <input
+                        id="import-backup-file-input"
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        onChange={handleImportJSON}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Automatic Local Version History */}
+              <div className="p-5 rounded-2xl border border-stone-200 bg-white space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-stone-600" />
+                    <h3 className="font-semibold text-stone-900 text-xs sm:text-sm">
+                      Recent Automatic Snapshots ({localSnapshots.length})
+                    </h3>
+                  </div>
+                  {localSnapshots.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Clear all local snapshot history?')) {
+                          setLocalSnapshots([]);
+                          localStorage.removeItem('portfolio_backup_snapshots');
+                        }
+                      }}
+                      className="text-[11px] text-stone-400 hover:text-red-600 transition-colors cursor-pointer"
+                    >
+                      Clear History
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-xs text-stone-500">
+                  Every time you save changes or export a backup, a snapshot is preserved locally in your browser so you can undo changes anytime.
+                </p>
+
+                {localSnapshots.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-stone-400 border border-dashed border-stone-200 rounded-xl">
+                    No snapshots recorded yet. Snapshots will appear automatically when you save changes or download a backup.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {localSnapshots.map((snap) => (
+                      <div 
+                        key={snap.id} 
+                        className="p-3 rounded-xl border border-stone-200 hover:border-stone-300 bg-stone-50/60 flex items-center justify-between gap-3 text-xs transition-colors"
+                      >
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-stone-900 truncate">
+                              {snap.label}
+                            </span>
+                            <span className="text-[10px] font-mono text-stone-400">
+                              {new Date(snap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-stone-500">
+                            {new Date(snap.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {snap.itemCounts ? ` • ${snap.itemCounts.projects} projects, ${snap.itemCounts.experiences} companies` : ''}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreSnapshot(snap)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-[11px] font-medium transition-colors cursor-pointer"
+                            title="Restore this version into editor"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Restore</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadSnapshot(snap)}
+                            className="p-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 transition-colors cursor-pointer"
+                            title="Download this snapshot as JSON"
+                          >
+                            <Download className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSnapshot(snap.id)}
+                            className="p-1.5 rounded-lg text-stone-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Delete snapshot"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Direct JSON Code Inspector (Collapsible) */}
+              <div className="p-4 rounded-2xl border border-stone-200 bg-stone-50/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowManualJson(!showManualJson)}
+                    className="flex items-center gap-2 text-xs font-semibold text-stone-800 hover:text-stone-950 transition-colors cursor-pointer"
+                  >
+                    <FileJson className="w-4 h-4 text-stone-600" />
+                    <span>Direct JSON Code Paste / Inspector</span>
+                  </button>
+                  <span className="text-[11px] text-stone-400">Advanced</span>
+                </div>
+
+                {showManualJson && (
+                  <div className="pt-2 space-y-3">
+                    <p className="text-xs text-stone-500">
+                      Paste raw portfolio JSON below to import directly:
+                    </p>
+                    <textarea
+                      value={manualJsonInput}
+                      onChange={(e) => setManualJsonInput(e.target.value)}
+                      placeholder='Paste JSON here: { "profile": { ... }, "projects": [ ... ] }'
+                      rows={6}
+                      className="w-full p-3 font-mono text-xs rounded-xl border border-stone-200 bg-white text-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-hidden"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentData = {
+                            profile: editedProfile,
+                            experienceNodes: flattenCardsToNodes(experienceCards),
+                            projects: editedProjects,
+                            skills: editedSkills,
+                            sections: editedSections
+                          };
+                          setManualJsonInput(JSON.stringify(currentData, null, 2));
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 text-xs font-medium cursor-pointer"
+                      >
+                        Load Current JSON
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleApplyManualJson}
+                        disabled={!manualJsonInput.trim()}
+                        className="px-3.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        Apply JSON to Editor
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 sm:p-5 border-t border-stone-200 bg-stone-50/50 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm('Reset portfolio back to default Product Design Engineer demo data?')) {
-                onReset();
-                onClose();
-              }
-            }}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-stone-500 hover:text-stone-900 hover:bg-stone-100 transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset to Demo Data</span>
-          </button>
+        <div className="p-4 sm:p-5 border-t border-stone-200 bg-stone-50/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Backup & Restore Action Buttons */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              id="footer-backup-btn"
+              onClick={handleExportJSON}
+              className="inline-flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700 bg-white transition-colors cursor-pointer shadow-2xs"
+              title="Download complete JSON backup file"
+            >
+              <Download className="w-3.5 h-3.5 text-stone-600" />
+              <span>Backup (Export JSON)</span>
+            </button>
 
-          <div className="flex items-center gap-2">
+            <label 
+              htmlFor="footer-import-backup-input"
+              className="inline-flex items-center justify-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-stone-200 hover:bg-stone-100 text-stone-700 bg-white transition-colors cursor-pointer shadow-2xs"
+              title="Restore from JSON backup file"
+            >
+              <Upload className="w-3.5 h-3.5 text-stone-600" />
+              <span>Restore Backup</span>
+              <input
+                id="footer-import-backup-input"
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleImportJSON}
+              />
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
               type="button"
               onClick={onClose}
-              className="text-xs font-medium px-3.5 py-1.5 rounded-lg text-stone-600 hover:bg-stone-100 transition-colors"
+              className="text-xs font-medium px-3.5 py-2 rounded-lg text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="button"
+              id="footer-save-changes-btn"
               onClick={handleSave}
-              className="inline-flex items-center gap-1.5 text-xs font-medium px-4 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white shadow-2xs transition-all"
+              className="inline-flex items-center justify-center gap-1.5 text-xs font-medium px-4 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white shadow-2xs transition-all cursor-pointer"
             >
               {savedFeedback ? (
                 <>

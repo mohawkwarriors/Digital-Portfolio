@@ -388,7 +388,6 @@ export default function App() {
           skills={skills}
           sections={sections}
           onSave={handleSaveData}
-          onReset={handleResetData}
         />
       )}
     </div>

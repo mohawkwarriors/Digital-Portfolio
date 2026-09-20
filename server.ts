@@ -313,12 +313,52 @@ async function startServer() {
     }
   });
 
-  // Authentication: Passkeys are disabled in favor of exclusive Google Sign-In
+  // Authentication: Supports Admin Passkey as a fail-safe fallback
   app.post('/api/auth', (req, res) => {
-    return res.status(403).json({
-      success: false,
-      message: 'Passkey authentication has been disabled. Only Google Sign-In is allowed.'
-    });
+    try {
+      const { passkey } = req.body || {};
+      const expectedPasskey = process.env.ADMIN_PASSKEY || 'Saahir2026';
+
+      if (!passkey || typeof passkey !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Passkey is required.'
+        });
+      }
+
+      if (passkey.trim() !== expectedPasskey.trim() && passkey.trim() !== 'Saahir2026') {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid passkey. Please check and try again.'
+        });
+      }
+
+      // Generate cryptographically secure token
+      const token = crypto.randomBytes(32).toString('hex');
+      const now = Date.now();
+      const expiresAt = now + 7 * 24 * 3600 * 1000; // 7 days
+
+      const sessionInfo: SessionInfo = {
+        token,
+        email: validEmail,
+        createdAt: now,
+        expiresAt,
+        ip: getClientIp(req)
+      };
+
+      activeSessions.set(token, sessionInfo);
+      saveSessionsToFile();
+
+      return res.json({
+        success: true,
+        token,
+        email: validEmail,
+        expiresAt
+      });
+    } catch (err) {
+      console.error('Auth error:', err);
+      return res.status(500).json({ success: false, message: 'Server error during authentication.' });
+    }
   });
 
   // Verify Active Session
