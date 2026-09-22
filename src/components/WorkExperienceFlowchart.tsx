@@ -91,38 +91,6 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
     });
   };
 
-  const handleGroupMouseEnter = (nodesInGroup: ExperienceFlowNode[]) => {
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-    setExpandedNodes(prev => {
-      const next = { ...prev };
-      nodesInGroup.forEach(node => {
-        next[node.id] = true;
-      });
-      return next;
-    });
-  };
-
-  const handleGroupMouseLeave = (nodesInGroup: ExperienceFlowNode[], company: string) => {
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
-    
-    // Check if this group was actually expanded
-    const isAnyExpanded = nodesInGroup.some(node => !!expandedNodes[node.id]);
-    if (!isAnyExpanded) return;
-
-    const groupId = `exp-group-${company.replace(/\s+/g, '-').toLowerCase()}`;
-    const el = document.getElementById(groupId);
-    const sec = document.getElementById('experience');
-    anchorSectionOnCollapse(el, sec, HEADER_OFFSET);
-
-    setExpandedNodes(prev => {
-      const next = { ...prev };
-      nodesInGroup.forEach(node => {
-        delete next[node.id];
-      });
-      return next;
-    });
-  };
-
   const getLogoFilterClass = (contrast?: 'none' | 'invert-in-dark' | 'invert-in-light', invertInDark?: boolean, companyName?: string) => {
     if (contrast === 'invert-in-dark' || invertInDark) {
       return 'dark:brightness-0 dark:invert';
@@ -240,8 +208,6 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                       ease: [0.16, 1, 0.3, 1],
                       layout: { duration: 0.35, ease: [0.16, 1, 0.3, 1] }
                     }}
-                    onMouseEnter={() => handleGroupMouseEnter(group.nodes)}
-                    onMouseLeave={() => handleGroupMouseLeave(group.nodes, group.company)}
                     style={{ overflowAnchor: 'none' }}
                     className={`group/card bg-white dark:bg-[#1a1a1e] rounded-2xl border-2 border-stone-200/90 dark:border-stone-700/90 overflow-hidden shadow-md dark:shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6)] transition-all duration-300 ease-out origin-center ${
                       isThisGroupExpanded 

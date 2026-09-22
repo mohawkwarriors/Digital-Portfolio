@@ -23,6 +23,8 @@ async function startServer() {
       const fs = await import('fs');
       const filePath = path.join(publicPath, 'resume.pdf');
       if (fs.existsSync(filePath)) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'inline; filename="Mohammed_Saahir_Essa_Resume.pdf"');
         res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
@@ -37,6 +39,8 @@ async function startServer() {
   // Dedicated direct PDF download endpoint: always serves original untouched binary with attachment header
   app.get('/api/download-resume', async (req, res) => {
     try {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
       const fs = await import('fs');
       const requestedUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
 

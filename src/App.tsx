@@ -30,6 +30,14 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 const STORAGE_KEY = 'digital_portfolio_pde_v2';
 
+// Ensure authentic photo of Mohammed Saahir Essa is always loaded, never placeholder unsplash headshot
+export const resolveAvatarUrl = (url?: string): string => {
+  if (!url || typeof url !== 'string' || url.includes('photo-1507003211169') || url.includes('unsplash.com')) {
+    return '/saahir.jpg';
+  }
+  return url;
+};
+
 export default function App() {
   const [profile, setProfile] = useState<Profile>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -49,7 +57,7 @@ export default function App() {
           const mergedProfile = { 
             ...initialProfile, 
             ...parsed.profile, 
-            avatarUrl: parsed.profile.avatarUrl || initialProfile.avatarUrl,
+            avatarUrl: resolveAvatarUrl(parsed.profile.avatarUrl),
             resumeUrl: (parsed.profile.resumeUrl && parsed.profile.resumeUrl.trim() !== '') ? parsed.profile.resumeUrl : (initialProfile.resumeUrl || '/resume.pdf')
           };
           mergedProfile.stats = mergedStats || initialProfile.stats;
@@ -151,7 +159,7 @@ export default function App() {
           ...initialProfile,
           ...data.profile,
           stats: mergedStats || prev.stats || initialProfile.stats,
-          avatarUrl: data.profile.avatarUrl || prev.avatarUrl || initialProfile.avatarUrl,
+          avatarUrl: resolveAvatarUrl(data.profile.avatarUrl || prev.avatarUrl),
           resumeUrl: (data.profile.resumeUrl && data.profile.resumeUrl.trim() !== '') ? data.profile.resumeUrl : (prev.resumeUrl || '/resume.pdf')
         };
       });

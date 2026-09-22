@@ -14,7 +14,7 @@ export const initialProfile: Profile = {
   linkedin: "https://www.linkedin.com/in/mohammedessa/",
   resumeUrl: "/resume.pdf",
   twitter: "https://x.com",
-  avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=800&auto=format&fit=crop",
+  avatarUrl: "/saahir.jpg",
   availableForHire: false,
   statusBadge: "HW Product Design Engineer",
   stats: [

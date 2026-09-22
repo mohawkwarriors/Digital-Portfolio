@@ -22,6 +22,11 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
   const [copiedEmail, setCopiedEmail] = useState(false);
 
+  // Strictly prioritize authentic photo of Mohammed Saahir Essa, never showing placeholder headshot
+  const cleanAvatar = (!profile.avatarUrl || profile.avatarUrl.includes('photo-1507003211169') || profile.avatarUrl.includes('unsplash.com'))
+    ? '/saahir.jpg'
+    : profile.avatarUrl;
+
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(profile.email);
     setCopiedEmail(true);
@@ -60,10 +65,16 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
                   {/* Headshot */}
                   <div className="relative w-36 h-36 min-[375px]:w-40 min-[375px]:h-40 sm:w-48 sm:h-48 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-800 shadow-sm bg-stone-100 dark:bg-stone-900 shrink-0">
                     <img 
-                      src={profile.avatarUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=800&auto=format&fit=crop"} 
+                      src={cleanAvatar} 
                       alt={profile.name} 
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.src.endsWith('/saahir.jpg')) {
+                          target.src = '/saahir.jpg';
+                        }
+                      }}
                     />
                     <div className="absolute inset-0 ring-1 ring-inset ring-black/10 dark:ring-white/10 rounded-2xl"></div>
                   </div>
@@ -133,10 +144,16 @@ export const Hero: React.FC<HeroProps> = ({ profile, onOpenResume }) => {
               {/* Headshot */}
               <div className="relative w-64 h-64 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-800 shadow-sm bg-stone-100 dark:bg-stone-900 shrink-0">
                 <img 
-                  src={profile.avatarUrl || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=800&auto=format&fit=crop"} 
+                  src={cleanAvatar} 
                   alt={profile.name} 
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.src.endsWith('/saahir.jpg')) {
+                      target.src = '/saahir.jpg';
+                    }
+                  }}
                 />
                 <div className="absolute inset-0 ring-1 ring-inset ring-black/10 dark:ring-white/10 rounded-2xl"></div>
               </div>
