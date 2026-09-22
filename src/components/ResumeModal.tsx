@@ -5,17 +5,7 @@ import {
   ExternalLink, 
   FileText, 
   RefreshCw, 
-  ZoomIn, 
-  ZoomOut, 
-  RotateCcw, 
-  AlertCircle, 
-  Eye, 
-  Printer, 
-  MapPin, 
-  Phone, 
-  Mail, 
-  Linkedin,
-  FileCheck
+  AlertCircle
 } from 'lucide-react';
 import { Profile } from '../types';
 import { getResumePdf, StoredPdfRecord } from '../utils/pdfStorage';
@@ -42,7 +32,6 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   // PDF.js Canvas Rendering State
-  const [viewMode, setViewMode] = useState<'pdf' | 'document'>('pdf');
   const [pdfDoc, setPdfDoc] = useState<any | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [scale, setScale] = useState<number>(1.0);
@@ -220,8 +209,6 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
         if (isMounted) {
           setPdfError(err.message || 'Unable to render PDF view');
           setIsLoadingPdf(false);
-          // Seamlessly switch to formatted Document View if PDF canvas fails
-          setViewMode('document');
         }
       }
     }
@@ -233,9 +220,9 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
     };
   }, [isOpen, rawUrl, storedPdf, ensurePdfJs]);
 
-  // Render canvas pages whenever pdfDoc, scale, or viewMode changes
+  // Render canvas pages whenever pdfDoc or scale changes
   useEffect(() => {
-    if (!pdfDoc || viewMode !== 'pdf') return;
+    if (!pdfDoc) return;
 
     let isCancelled = false;
 
@@ -295,11 +282,11 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
       });
       renderTasks.current.clear();
     };
-  }, [pdfDoc, scale, viewMode]);
+  }, [pdfDoc, scale]);
 
   // Auto-fit scale on window resize
   useEffect(() => {
-    if (!pdfDoc || viewMode !== 'pdf') return;
+    if (!pdfDoc) return;
 
     const handleResize = async () => {
       if (containerRef.current && pdfDoc) {
@@ -316,7 +303,7 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [pdfDoc, viewMode]);
+  }, [pdfDoc]);
 
   const isExternalGoogleDrive = rawUrl.includes('drive.google.com') && rawUrl.includes('/view');
 
@@ -406,18 +393,6 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
     }
   };
 
-  const handlePrint = () => {
-    if (viewMode === 'document') {
-      window.print();
-    } else {
-      handleOpenInNewTab({ preventDefault: () => {} } as React.MouseEvent);
-    }
-  };
-
-  const handleZoomIn = () => setScale(s => Math.min(parseFloat((s + 0.15).toFixed(2)), 2.5));
-  const handleZoomOut = () => setScale(s => Math.max(parseFloat((s - 0.15).toFixed(2)), 0.5));
-  const handleResetZoom = () => setScale(1.0);
-
   if (!isOpen) return null;
 
   return (
@@ -449,73 +424,6 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
 
           {/* Controls and Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap ml-auto">
-            {/* View Mode Toggle */}
-            <div className="inline-flex rounded-lg bg-stone-800 p-0.5 text-xs font-medium border border-stone-700/60">
-              <button
-                type="button"
-                id="toggle-pdf-view"
-                onClick={() => setViewMode('pdf')}
-                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
-                  viewMode === 'pdf'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-stone-300 hover:text-stone-100'
-                }`}
-                title="View original vector PDF render"
-              >
-                <FileCheck className="w-3.5 h-3.5" />
-                <span className="hidden min-[400px]:inline">PDF View</span>
-              </button>
-              <button
-                type="button"
-                id="toggle-document-view"
-                onClick={() => setViewMode('document')}
-                className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
-                  viewMode === 'document'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-stone-300 hover:text-stone-100'
-                }`}
-                title="View clean formatted document text"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span className="hidden min-[400px]:inline">Document</span>
-              </button>
-            </div>
-
-            {/* Zoom Controls (only shown in PDF View) */}
-            {viewMode === 'pdf' && (
-              <div className="hidden md:flex items-center bg-stone-800/80 rounded-lg p-0.5 border border-stone-700/60 text-xs">
-                <button
-                  type="button"
-                  onClick={handleZoomOut}
-                  disabled={scale <= 0.5}
-                  className="p-1 rounded text-stone-300 hover:text-white hover:bg-stone-700 disabled:opacity-40 cursor-pointer"
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="w-3.5 h-3.5" />
-                </button>
-                <span className="px-1.5 font-mono text-[11px] text-stone-300 w-12 text-center select-none">
-                  {Math.round(scale * 100)}%
-                </span>
-                <button
-                  type="button"
-                  onClick={handleZoomIn}
-                  disabled={scale >= 2.5}
-                  className="p-1 rounded text-stone-300 hover:text-white hover:bg-stone-700 disabled:opacity-40 cursor-pointer"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetZoom}
-                  className="p-1 ml-0.5 rounded text-stone-400 hover:text-white hover:bg-stone-700 cursor-pointer"
-                  title="Reset Zoom to 100%"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
-              </div>
-            )}
-
             {/* Download Original PDF Directly */}
             <button
               id="download-resume-pdf-btn"
@@ -523,7 +431,7 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
               onClick={handleDownload}
               disabled={isDownloading}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-              title="Download untouched PDF file directly"
+              title="Download original PDF file"
             >
               {isDownloading ? (
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -560,267 +468,79 @@ export const ResumeModal: React.FC<ResumeModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Main Content */}
+        {/* Modal Main Content - Dedicated PDF Canvas Viewer */}
         <div 
           ref={containerRef}
           className="flex-1 bg-stone-950 relative overflow-y-auto overflow-x-auto p-3 sm:p-6"
         >
-          {/* VIEW MODE 1: Native Canvas Vector PDF Renderer */}
-          {viewMode === 'pdf' && (
-            <div className="flex flex-col items-center justify-start min-h-full">
-              {/* Loading Indicator */}
-              {isLoadingPdf && (
-                <div className="flex flex-col items-center justify-center py-20 text-stone-400 gap-3">
-                  <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
-                  <p className="text-sm font-medium">Rendering vector PDF document...</p>
-                  <p className="text-xs text-stone-500 font-mono">Loading pages & high-res typography</p>
-                </div>
-              )}
+          <div className="flex flex-col items-center justify-start min-h-full">
+            {/* Loading Indicator */}
+            {isLoadingPdf && (
+              <div className="flex flex-col items-center justify-center py-20 text-stone-400 gap-3">
+                <RefreshCw className="w-8 h-8 text-blue-400 animate-spin" />
+                <p className="text-sm font-medium">Loading vector PDF document...</p>
+                <p className="text-xs text-stone-500 font-mono">Rendering high-resolution vector pages</p>
+              </div>
+            )}
 
-              {/* Error fallback banner */}
-              {pdfError && !isLoadingPdf && (
-                <div className="w-full max-w-xl mx-auto p-4 mb-4 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                  <div className="text-xs space-y-2">
-                    <p className="font-semibold text-sm text-amber-100">Inline PDF viewer preview unavailable</p>
-                    <p>Your browser blocked the inline canvas render. You can switch to the Document View or download the authentic PDF file directly.</p>
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setViewMode('document')}
-                        className="px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white rounded font-medium"
-                      >
-                        Switch to Document View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDownload}
-                        className="px-3 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded font-medium"
-                      >
-                        Download PDF
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Canvas Pages Container */}
-              {!isLoadingPdf && numPages > 0 && (
-                <div className="flex flex-col items-center gap-6 py-2">
-                  {Array.from({ length: numPages }, (_, idx) => idx + 1).map((pageNum) => (
-                    <div
-                      key={pageNum}
-                      className="relative bg-white shadow-2xl rounded-sm overflow-hidden border border-stone-800 transition-transform duration-150 ease-out origin-top"
+            {/* Error fallback banner */}
+            {pdfError && !isLoadingPdf && (
+              <div className="w-full max-w-xl mx-auto p-4 mb-4 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-200 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-2">
+                  <p className="font-semibold text-sm text-amber-100">Inline PDF render issue</p>
+                  <p>The PDF document could not be previewed inline. You can open it in a new tab or download the file directly.</p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium cursor-pointer"
                     >
-                      <canvas
-                        ref={(el) => {
-                          if (el) {
-                            canvasRefs.current.set(pageNum, el);
-                          } else {
-                            canvasRefs.current.delete(pageNum);
-                          }
-                        }}
-                        className="block bg-white"
-                      />
-                      {numPages > 1 && (
-                        <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-[10px] text-white font-mono backdrop-blur-xs">
-                          Page {pageNum} of {numPages}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Mobile Quick Zoom Bar */}
-              {!isLoadingPdf && numPages > 0 && (
-                <div className="md:hidden sticky bottom-2 mt-4 flex items-center gap-2 bg-stone-900/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-stone-700 shadow-xl text-xs z-20">
-                  <button
-                    type="button"
-                    onClick={handleZoomOut}
-                    className="p-1 rounded text-stone-300 hover:text-white"
-                    title="Zoom Out"
-                  >
-                    <ZoomOut className="w-4 h-4" />
-                  </button>
-                  <span className="font-mono text-stone-300 px-1 text-[11px]">
-                    {Math.round(scale * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleZoomIn}
-                    className="p-1 rounded text-stone-300 hover:text-white"
-                    title="Zoom In"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleResetZoom}
-                    className="p-1 text-stone-400 hover:text-white ml-1 border-l border-stone-700 pl-2"
-                    title="Reset to 100%"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* VIEW MODE 2: Clean Formatted High-Contrast Document View */}
-          {viewMode === 'document' && (
-            <div className="max-w-3xl mx-auto bg-white text-stone-900 rounded-xl shadow-2xl p-6 sm:p-10 border border-stone-200 selection:bg-blue-200">
-              {/* Document Header */}
-              <div className="border-b border-stone-200 pb-5 mb-6">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-950">
-                  Mohammed Saahir Essa
-                </h1>
-                <p className="text-sm sm:text-base font-semibold text-blue-700 mt-1">
-                  Product Design Engineer — High-Volume Consumer Hardware & Precision Mechanisms
-                </p>
-
-                {/* Contact Bar */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-stone-600 mt-3 font-mono">
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-stone-400" />
-                    San Francisco Bay Area, CA
-                  </span>
-                  <a href="tel:281-736-3568" className="inline-flex items-center gap-1 hover:text-blue-600 transition-colors">
-                    <Phone className="w-3.5 h-3.5 text-stone-400" />
-                    281-736-3568
-                  </a>
-                  <a href="mailto:saahiressa@gmail.com" className="inline-flex items-center gap-1 hover:text-blue-600 transition-colors">
-                    <Mail className="w-3.5 h-3.5 text-stone-400" />
-                    saahiressa@gmail.com
-                  </a>
-                  <a 
-                    href="https://www.linkedin.com/in/mohammedessa/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 hover:text-blue-600 transition-colors"
-                  >
-                    <Linkedin className="w-3.5 h-3.5 text-blue-500" />
-                    linkedin.com/in/mohammedessa
-                  </a>
+                      Download PDF
+                    </button>
+                    <a
+                      href={fallbackUrl}
+                      onClick={handleOpenInNewTab}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded font-medium inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open in Tab
+                    </a>
+                  </div>
                 </div>
               </div>
+            )}
 
-              {/* Professional Experience Section */}
-              <section className="mb-7">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500 border-b border-stone-200 pb-1 mb-4">
-                  Professional Experience
-                </h2>
-
-                <div className="space-y-6">
-                  {/* Google - Next Gen Pixel */}
-                  <div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1">
-                      <h3 className="font-bold text-stone-950 text-sm sm:text-base">Google</h3>
-                      <span className="text-xs text-stone-500 font-mono">San Francisco Bay Area, CA</span>
-                    </div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1 text-xs text-blue-800 font-semibold mb-2">
-                      <span>Product Design Engineer — Next Gen Pixel</span>
-                      <span className="text-stone-500 font-mono font-normal">2026 – Present</span>
-                    </div>
-                    <ul className="list-disc list-outside pl-4 space-y-1.5 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                      <li>Led rear camera hardware integration by engineering a unified bracket structure, enhancing thermal dissipation, structural integrity, and EMI mitigation within a more compact form factor.</li>
-                      <li>Expanded battery capacity by 140mAh by championing the integration of advanced cell chemistry and an innovative pack architecture, delivering Pixel’s top battery energy density by volume.</li>
-                      <li>Developed a next-generation battery serviceability architecture featuring a robust interface to streamline end-user repairs.</li>
-                      <li>Generated $1.2M in lifetime savings through module standardization, upstream assembly integration, and qualification of alternate thermal materials.</li>
-                    </ul>
+            {/* Canvas Pages Container */}
+            {!isLoadingPdf && numPages > 0 && (
+              <div className="flex flex-col items-center gap-6 py-2">
+                {Array.from({ length: numPages }, (_, idx) => idx + 1).map((pageNum) => (
+                  <div
+                    key={pageNum}
+                    className="relative bg-white shadow-2xl rounded-sm overflow-hidden border border-stone-800 transition-transform duration-150 ease-out origin-top"
+                  >
+                    <canvas
+                      ref={(el) => {
+                        if (el) {
+                          canvasRefs.current.set(pageNum, el);
+                        } else {
+                          canvasRefs.current.delete(pageNum);
+                        }
+                      }}
+                      className="block bg-white"
+                    />
+                    {numPages > 1 && (
+                      <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 text-[10px] text-white font-mono backdrop-blur-xs">
+                        Page {pageNum} of {numPages}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Google - Pixel 10 Pro */}
-                  <div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1">
-                      <h3 className="font-bold text-stone-950 text-sm sm:text-base">Google</h3>
-                      <span className="text-xs text-stone-500 font-mono">San Francisco Bay Area, CA</span>
-                    </div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1 text-xs text-blue-800 font-semibold mb-2">
-                      <span>Product Design Engineer — Pixel 10 Pro</span>
-                      <span className="text-stone-500 font-mono font-normal">2024 – 2025</span>
-                    </div>
-                    <ul className="list-disc list-outside pl-4 space-y-1.5 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                      <li>Designed lower device architecture including speaker, haptics, 3 jumper flexes, PCBA, USB-C, and microphone-barometric port; redesigned architecture enabling a 100mAh battery increase.</li>
-                      <li>Elevated external aesthetics by designing a cost-effective metal mesh for the bottom acoustic ports.</li>
-                      <li>Unified Pixel 10 and 10 Pro chin design to standardize components and assembly fixtures, driving $1.5M in CapEx and piece-part cost savings.</li>
-                    </ul>
-                  </div>
-
-                  {/* Google - Pixel 8 */}
-                  <div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1">
-                      <h3 className="font-bold text-stone-950 text-sm sm:text-base">Google</h3>
-                      <span className="text-xs text-stone-500 font-mono">San Francisco Bay Area, CA</span>
-                    </div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1 text-xs text-blue-800 font-semibold mb-2">
-                      <span>Product Design Engineer — Pixel 8</span>
-                      <span className="text-stone-500 font-mono font-normal">2022 – 2023</span>
-                    </div>
-                    <ul className="list-disc list-outside pl-4 space-y-1.5 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                      <li>Designed PCBA mechanical architecture through custom and off-the-shelf parts to achieve EMI, antenna, and thermal goals; met Google, T-Mobile, and AT&T RASS reliability standards.</li>
-                      <li>Owned enclosure assembly and 6 system configurations for RF, battery, and carrier testing.</li>
-                      <li>Drove $1.4M in cost savings by standardizing internal die-cuts, validating cost-effective materials, and consolidating multi-piece stacks for FATP assembly.</li>
-                    </ul>
-                  </div>
-
-                  {/* Culture Biosciences */}
-                  <div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1">
-                      <h3 className="font-bold text-stone-950 text-sm sm:text-base">Culture Biosciences</h3>
-                      <span className="text-xs text-stone-500 font-mono">South San Francisco, CA</span>
-                    </div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-1 text-xs text-blue-800 font-semibold mb-2">
-                      <span>Lead Mechanical Engineer — R&D Bioreactors & Lab Hardware</span>
-                      <span className="text-stone-500 font-mono font-normal">2021 – 2022</span>
-                    </div>
-                    <ul className="list-disc list-outside pl-4 space-y-1.5 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                      <li>Lead mechanical engineer for R&D 250L pilot scale bioreactor; engineered single-use USP Class VI / FDA food-safe injection-molded plastics to ensure sterility and autoclave compatibility.</li>
-                      <li>Designed ergonomic handheld device with IP43 equivalent protection for technicians to individually control 6 peristaltic pumps with 0.5 mL accuracy.</li>
-                    </ul>
-                  </div>
-                </div>
-              </section>
-
-              {/* Featured Engineering Project */}
-              <section className="mb-7">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500 border-b border-stone-200 pb-1 mb-4">
-                  Featured Engineering Project
-                </h2>
-                <div>
-                  <div className="flex flex-wrap items-baseline justify-between gap-1">
-                    <h3 className="font-bold text-stone-950 text-sm sm:text-base">Semi-Automated Seeding Machine — Dream Harvest Farms</h3>
-                    <span className="text-xs text-stone-500 font-mono">Capstone Design</span>
-                  </div>
-                  <ul className="list-disc list-outside pl-4 space-y-1.5 text-xs sm:text-sm text-stone-700 leading-relaxed mt-2">
-                    <li>Developed a semi-automated device to plant seeds (2mm to 15mm) utilizing vacuum suction pressure for under $800.</li>
-                    <li>Reduced overall seeding time by 60% and decreased the required human operators from 5 to 1 for commercial hydroponics.</li>
-                  </ul>
-                </div>
-              </section>
-
-              {/* Technical Skills & Expertise */}
-              <section>
-                <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500 border-b border-stone-200 pb-1 mb-4">
-                  Technical Skills & Expertise
-                </h2>
-                <div className="space-y-2 text-xs sm:text-sm text-stone-700 leading-relaxed">
-                  <div>
-                    <span className="font-semibold text-stone-900">CAD & Design: </span>
-                    Siemens NX, Fusion 360, Onshape, Inventor, SolidWorks, GD&T, DFM/DFA, Kinematics
-                  </div>
-                  <div>
-                    <span className="font-semibold text-stone-900">Manufacturing: </span>
-                    Injection Molding, Die Casting (ZA alloy), Sheet Metal Stamping, CNC Machining, Diecut, Overmolding, PCBA
-                  </div>
-                  <div>
-                    <span className="font-semibold text-stone-900">Testing & NPI: </span>
-                    Tooling Qualification, FATP Assembly, Drop/Impact Analysis, Thermal & EMI Mitigation, Carrier Reliability
-                  </div>
-                </div>
-              </section>
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
