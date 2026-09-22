@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowUp, Github, Linkedin, Mail, Briefcase, Wrench, Lock } from 'lucide-react';
+import { motion } from 'motion/react';
 import { Profile } from '../types';
 
 interface FooterProps {
@@ -36,7 +37,13 @@ export const Footer: React.FC<FooterProps> = ({
 
   return (
     <footer id="portfolio-footer" className="bg-stone-50/70 text-stone-500 py-12 border-t border-stone-200/80 text-xs">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+      <motion.div 
+        initial={{ opacity: 0, y: 14, filter: 'blur(3px)' }}
+        whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+        viewport={{ once: true, margin: '-40px 0px' }}
+        transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+        className="max-w-6xl mx-auto px-4 sm:px-6"
+      >
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-stone-200/80">
           {/* Brand & Tagline */}
           <div className="space-y-1 text-center md:text-left">
@@ -124,7 +131,7 @@ export const Footer: React.FC<FooterProps> = ({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
     </footer>
   );
 };

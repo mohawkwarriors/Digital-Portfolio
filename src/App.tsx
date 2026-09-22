@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { initialProfile, initialExperienceNodes, initialProjects, initialSkills, initialSections } from './data/initialData';
 import { Profile, ExperienceFlowNode, Project, SkillCategory, SectionConfig } from './types';
 import { ChaptersBar } from './components/ChaptersBar';
@@ -356,7 +357,14 @@ export default function App() {
         return (
           <section id={section.id} key={section.id} className="py-12 md:py-16 border-b border-stone-200 dark:border-stone-800">
             <div className="max-w-6xl mx-auto px-4 sm:px-6">
-              <h2 className="text-3xl font-bold mb-8 text-stone-900 dark:text-stone-100">{section.title}</h2>
+              <motion.div
+                initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+                whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                viewport={{ once: true, margin: '-60px 0px -30px 0px' }}
+                transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <h2 className="text-2xl sm:text-3xl font-bold mb-8 tracking-tight text-stone-900 dark:text-stone-100">{section.title}</h2>
+              </motion.div>
               {section.content && (
                 <div 
                   className="prose dark:prose-invert max-w-none text-stone-600 dark:text-stone-400" 

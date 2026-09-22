@@ -171,10 +171,10 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
         
         {/* Section Header */}
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          viewport={{ once: true, margin: '-60px 0px -30px 0px' }}
+          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           className="flex items-center justify-between"
         >
           <h2 id="experience-heading" className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
@@ -199,14 +199,14 @@ export const WorkExperienceFlowchart: React.FC<WorkExperienceFlowchartProps> = (
                     key={group.company}
                     id={groupDomId}
                     layout="position"
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-50px' }}
+                    initial={{ opacity: 0, y: 22, filter: 'blur(4px)' }}
+                    whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    viewport={{ once: true, margin: '-50px 0px -20px 0px' }}
                     transition={{ 
-                      duration: 0.5, 
-                      delay: idx * 0.1, 
-                      ease: [0.16, 1, 0.3, 1],
-                      layout: { duration: 0.35, ease: [0.16, 1, 0.3, 1] }
+                      duration: 0.65, 
+                      delay: idx * 0.08, 
+                      ease: [0.22, 1, 0.36, 1],
+                      layout: { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
                     }}
                     style={{ overflowAnchor: 'none' }}
                     className={`group/card bg-white dark:bg-[#1a1a1e] rounded-2xl border-2 border-stone-200/90 dark:border-stone-700/90 overflow-hidden shadow-md dark:shadow-[0_4px_24px_-2px_rgba(0,0,0,0.6)] transition-all duration-300 ease-out origin-center ${

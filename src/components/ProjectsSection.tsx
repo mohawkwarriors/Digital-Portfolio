@@ -28,15 +28,15 @@ export const ProjectsSection: React.FC<ProjectsSectionProps> = ({ projects }) =>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8">
         {/* Section Heading: Strictly "Projects" */}
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          viewport={{ once: true, margin: '-60px 0px -30px 0px' }}
+          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           className="flex items-center justify-between"
         >
           <h2
             id="projects-heading"
-            className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900"
+            className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 dark:text-stone-100"
           >
             Projects
           </h2>
@@ -47,10 +47,10 @@ export const ProjectsSection: React.FC<ProjectsSectionProps> = ({ projects }) =>
           {projects.map((project, idx) => (
             <motion.div
               key={project.id}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-50px' }}
-              transition={{ duration: 0.5, delay: idx * 0.1, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0, y: 20, filter: 'blur(4px)' }}
+              whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              viewport={{ once: true, margin: '-50px 0px -20px 0px' }}
+              transition={{ duration: 0.65, delay: idx * 0.08, ease: [0.22, 1, 0.36, 1] }}
             >
               <ProjectCard
                 project={project}

@@ -21,8 +21,19 @@ html.theme-transition div[class*="border-"] {
 
 @layer base {
   html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     background-color: #ffffff;
     color: #1c1917;
+  }
+
+  /* Reduce motion if requested by user system preferences */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
   }
 
   html.dark {

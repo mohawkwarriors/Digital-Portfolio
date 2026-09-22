@@ -21,10 +21,10 @@ export const SkillsSection: React.FC<SkillsSectionProps> = ({ skills }) => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
         {/* Section Header */}
         <motion.div 
-          initial={{ opacity: 0, y: 14 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0, y: 14, filter: 'blur(4px)' }}
+          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          viewport={{ once: true, margin: '-60px 0px -30px 0px' }}
+          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
           className="space-y-1.5"
         >
           <h2 id="skills-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
@@ -39,11 +39,11 @@ export const SkillsSection: React.FC<SkillsSectionProps> = ({ skills }) => {
             return (
               <motion.div
                 key={category.name}
-                initial={{ opacity: 0, y: 14 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-30px' }}
+                initial={{ opacity: 0, y: 18, filter: 'blur(4px)' }}
+                whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                viewport={{ once: true, margin: '-40px 0px -10px 0px' }}
                 whileHover={{ y: -2, transition: { duration: 0.2 } }}
-                transition={{ duration: 0.35, delay: catIdx * 0.06, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: 0.55, delay: catIdx * 0.07, ease: [0.22, 1, 0.36, 1] }}
                 className="bg-stone-50 dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-700 p-4 sm:p-5 shadow-sm hover:shadow-lg hover:shadow-stone-200/50 dark:hover:shadow-black/50 hover:border-stone-300 dark:hover:border-stone-600 transition-all duration-300 space-y-3.5 group"
               >
                 <div className="flex items-center gap-2 pb-2.5 border-b border-stone-100 dark:border-stone-800">

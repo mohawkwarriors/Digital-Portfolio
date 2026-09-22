@@ -30,9 +30,9 @@ const getChapterIcon = (type: string, id: string) => {
 export const ChaptersBar: React.FC<ChaptersBarProps> = ({ sections }) => {
   const scrollProgress = useMotionValue(0);
   const scaleX = useSpring(scrollProgress, {
-    stiffness: 140,
-    damping: 24,
-    restDelta: 0.001
+    stiffness: 110,
+    damping: 28,
+    restDelta: 0.0005
   });
 
   const chapters: Chapter[] = useMemo(() => {
